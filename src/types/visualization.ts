@@ -7,7 +7,7 @@ export type QuadCorners = {
   bottomLeft: Point2D;
 };
 
-export type ActiveTool = 'corners' | 'darken' | 'brush' | 'box' | 'eraser';
+export type ActiveTool = 'corners' | 'floorTexture' | 'brush' | 'box' | 'eraser' | 'wand';
 
 export type VisualizerState = {
   selectedProductId: string | null;
@@ -31,8 +31,12 @@ export type VisualizerState = {
   showOriginal: boolean;
   activeTool: ActiveTool;
   brushSize: number;
-  maskThreshold: number;
-  darkenOpacity: number;
+  brushHardness: number;       // 0–100: controls feathering softness (100 = hard edge)
+  edgeSnap: boolean;           // when true, brush snaps to detected edges
+  showMaskPreview: boolean;    // overlay the mask in a tinted color for visibility
+  preserveMask: boolean;       // when false, mask auto-clears on room switch
+  floorTextureStrength: number; // 0–1: how much floor texture bleeds into the rug (was darkenOpacity)
+  wandTolerance: number;       // 0–100: color tolerance for magic wand flood fill
 };
 
 export type VisualizerAction =
@@ -52,5 +56,9 @@ export type VisualizerAction =
   | { type: 'CLEAR_VISUALIZER' }
   | { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
   | { type: 'SET_BRUSH_SIZE'; payload: { size: number } }
-  | { type: 'SET_MASK_THRESHOLD'; payload: { threshold: number } }
-  | { type: 'SET_DARKEN_OPACITY'; payload: { opacity: number } };
+  | { type: 'SET_BRUSH_HARDNESS'; payload: { hardness: number } }
+  | { type: 'SET_EDGE_SNAP'; payload: { enabled: boolean } }
+  | { type: 'SET_SHOW_MASK_PREVIEW'; payload: { enabled: boolean } }
+  | { type: 'SET_PRESERVE_MASK'; payload: { enabled: boolean } }
+  | { type: 'SET_FLOOR_TEXTURE_STRENGTH'; payload: { strength: number } }
+  | { type: 'SET_WAND_TOLERANCE'; payload: { tolerance: number } };

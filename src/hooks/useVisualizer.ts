@@ -19,8 +19,12 @@ const initialState: VisualizerState = {
   showOriginal: false,
   activeTool: 'corners',
   brushSize: 35,
-  maskThreshold: 30,
-  darkenOpacity: 0.75,
+  brushHardness: 85,
+  edgeSnap: false,
+  showMaskPreview: false,
+  preserveMask: false,
+  floorTextureStrength: 0.35,
+  wandTolerance: 32,
 };
 
 export const useVisualizerStore = create<VisualizerStore>((set) => ({
@@ -46,6 +50,7 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             roomImageFile: null,
             isCustomRoom: false,
             quadCorners: null, // Reset to compute room default floor quad
+            // Mask clearing is handled in the canvas component based on preserveMask
           };
         case 'UPLOAD_CUSTOM_ROOM':
           return {
@@ -82,10 +87,18 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { activeTool: action.payload.tool };
         case 'SET_BRUSH_SIZE':
           return { brushSize: action.payload.size };
-        case 'SET_MASK_THRESHOLD':
-          return { maskThreshold: action.payload.threshold };
-        case 'SET_DARKEN_OPACITY':
-          return { darkenOpacity: action.payload.opacity };
+        case 'SET_BRUSH_HARDNESS':
+          return { brushHardness: action.payload.hardness };
+        case 'SET_EDGE_SNAP':
+          return { edgeSnap: action.payload.enabled };
+        case 'SET_SHOW_MASK_PREVIEW':
+          return { showMaskPreview: action.payload.enabled };
+        case 'SET_PRESERVE_MASK':
+          return { preserveMask: action.payload.enabled };
+        case 'SET_FLOOR_TEXTURE_STRENGTH':
+          return { floorTextureStrength: action.payload.strength };
+        case 'SET_WAND_TOLERANCE':
+          return { wandTolerance: action.payload.tolerance };
         case 'RESET_TRANSFORM':
           return {
             quadCorners: null, // Forces re-computation of default floor quad
@@ -93,7 +106,7 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             opacity: 1,
             brightness: 0,
             shadowOpacity: 0.6,
-            darkenOpacity: 0.75,
+            floorTextureStrength: 0.35,
           };
         case 'TOGGLE_BEFORE_AFTER':
           return { showOriginal: !state.showOriginal };
@@ -108,5 +121,3 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
       }
     }),
 }));
-
-

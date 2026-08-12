@@ -9,16 +9,19 @@ import { sampleRooms } from '@/data/rooms';
 import RoomSelector from './RoomSelector';
 import VisualizerToolbar from './VisualizerToolbar';
 import { drawPerspectiveQuad, drawQuadShadow, QuadCorners, Point2D } from '@/lib/visualization/quadWarp';
+import { getEdgeMap, getEdgeStrength, clearEdgeMapCache } from '@/lib/visualization/edgeDetection';
 import {
   Move,
   Square,
   Paintbrush,
   Eraser,
-  Sparkles,
+  Layers,
   Eye,
   Download,
   Info,
-  Maximize2,
+  Wand2,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 interface VisualizationCanvasProps {
@@ -37,8 +40,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     showOriginal,
     activeTool,
     brushSize,
-    maskThreshold,
-    darkenOpacity,
+    brushHardness,
+    edgeSnap,
+    showMaskPreview,
+    preserveMask,
+    floorTextureStrength,
+    wandTolerance,
     dispatch,
   } = useVisualizerStore();
 
@@ -60,6 +67,82 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const [boxStart, setBoxStart] = useState<Point2D | null>(null);
   const [boxCurrent, setBoxCurrent] = useState<Point2D | null>(null);
 
+  // Track previous room image for conditional mask clearing
+  const prevRoomImageRef = useRef<string | null>(null);
+
+  // ─── UNDO / REDO HISTORY ───────────────────────────
+  const MAX_HISTORY = 30;
+  const undoStackRef = useRef<ImageData[]>([]);
+  const redoStackRef = useRef<ImageData[]>([]);
+  const [historyVersion, setHistoryVersion] = useState(0); // bumped to trigger re-render for button states
+
+  /** Save the current mask state to the undo stack (call BEFORE modifying the mask). */
+  const saveMaskSnapshot = useCallback(() => {
+    const mask = maskCanvasRef.current;
+    if (!mask) return;
+    const ctx = mask.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const snapshot = ctx.getImageData(0, 0, mask.width, mask.height);
+    undoStackRef.current.push(snapshot);
+    if (undoStackRef.current.length > MAX_HISTORY) {
+      undoStackRef.current.shift(); // drop oldest
+    }
+    // Any new action invalidates the redo stack
+    redoStackRef.current = [];
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+  /** Undo: restore previous mask state. */
+  const handleUndo = useCallback(() => {
+    const mask = maskCanvasRef.current;
+    if (!mask || undoStackRef.current.length === 0) return;
+    const ctx = mask.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    // Save current state to redo stack
+    const currentState = ctx.getImageData(0, 0, mask.width, mask.height);
+    redoStackRef.current.push(currentState);
+    // Restore previous state
+    const prevState = undoStackRef.current.pop()!;
+    ctx.putImageData(prevState, 0, 0);
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+  /** Redo: restore next mask state. */
+  const handleRedo = useCallback(() => {
+    const mask = maskCanvasRef.current;
+    if (!mask || redoStackRef.current.length === 0) return;
+    const ctx = mask.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    // Save current state to undo stack
+    const currentState = ctx.getImageData(0, 0, mask.width, mask.height);
+    undoStackRef.current.push(currentState);
+    // Restore next state
+    const nextState = redoStackRef.current.pop()!;
+    ctx.putImageData(nextState, 0, 0);
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+  const canUndo = undoStackRef.current.length > 0;
+  const canRedo = redoStackRef.current.length > 0;
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if (
+        ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) ||
+        ((e.ctrlKey || e.metaKey) && e.key === 'y')
+      ) {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
+
   // Initialize offscreen mask canvas
   useEffect(() => {
     if (!maskCanvasRef.current) {
@@ -69,22 +152,31 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     maskCanvasRef.current.height = containerSize.height;
   }, [containerSize]);
 
-  // Clear mask canvas helper
+  // Clear mask canvas helper (with undo snapshot)
   const clearMask = useCallback(() => {
     const mask = maskCanvasRef.current;
     if (!mask) return;
     const ctx = mask.getContext('2d');
     if (ctx) {
+      saveMaskSnapshot();
       ctx.clearRect(0, 0, mask.width, mask.height);
     }
-  }, []);
+  }, [saveMaskSnapshot]);
 
-  // Clear mask when room changes
+  // Clear mask when room changes (unless preserveMask is enabled)
   useEffect(() => {
-    clearMask();
-  }, [roomImage, clearMask]);
+    if (prevRoomImageRef.current !== null && prevRoomImageRef.current !== roomImage) {
+      if (!preserveMask) {
+        clearMask();
+      }
+      clearEdgeMapCache();
+    }
+    prevRoomImageRef.current = roomImage;
+  }, [roomImage, preserveMask, clearMask]);
 
-  // Apply Table Box Cutout with 100% straight clean edges
+  // ─────────────────────────────────────────────────────
+  // BOX CUTOUT: copies room pixels into mask within a rect
+  // ─────────────────────────────────────────────────────
   const applyBoxCutout = useCallback(
     (p1: Point2D, p2: Point2D) => {
       const mask = maskCanvasRef.current;
@@ -171,48 +263,11 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     }
   }, [containerSize.width, containerSize.height, roomImage, quadCorners, dispatch]);
 
-  // Sample average floor color from room image inside the floor quad
-  const getFloorColor = useCallback(() => {
-    if (!roomImageKonva) return { r: 160, g: 150, b: 140 };
-
-    const width = containerSize.width;
-    const height = containerSize.height;
-    if (width <= 0 || height <= 0) return { r: 160, g: 150, b: 140 };
-
-    const sampleCanvas = document.createElement('canvas');
-    sampleCanvas.width = width;
-    sampleCanvas.height = height;
-    const sCtx = sampleCanvas.getContext('2d');
-    if (!sCtx) return { r: 160, g: 150, b: 140 };
-
-    sCtx.drawImage(roomImageKonva, 0, 0, width, height);
-
-    let sampleX = Math.round(width * 0.5);
-    let sampleY = Math.round(height * 0.8);
-    if (quadCorners) {
-      sampleX = Math.round((quadCorners.topLeft.x + quadCorners.topRight.x + quadCorners.bottomRight.x + quadCorners.bottomLeft.x) / 4);
-      sampleY = Math.round((quadCorners.topLeft.y + quadCorners.topRight.y + quadCorners.bottomRight.y + quadCorners.bottomLeft.y) / 4);
-    }
-
-    const startX = Math.max(0, sampleX - 15);
-    const startY = Math.max(0, sampleY - 15);
-    const sampleData = sCtx.getImageData(startX, startY, 30, 30).data;
-
-    let rTotal = 0, gTotal = 0, bTotal = 0, count = 0;
-    for (let i = 0; i < sampleData.length; i += 4) {
-      rTotal += sampleData[i];
-      gTotal += sampleData[i + 1];
-      bTotal += sampleData[i + 2];
-      count++;
-    }
-    return {
-      r: Math.round(rTotal / count),
-      g: Math.round(gTotal / count),
-      b: Math.round(bTotal / count),
-    };
-  }, [roomImageKonva, quadCorners, containerSize]);
-
-  // Apply Smart Floor-Keyed Furniture Extractor Brush with Soft Feathering
+  // ─────────────────────────────────────────────────────
+  // PURE FOREGROUND PAINT BRUSH (no color keying!)
+  // Copies room pixels directly onto the mask canvas.
+  // The user paints furniture; those pixels show on top of rug.
+  // ─────────────────────────────────────────────────────
   const applyBrushSegment = useCallback(
     (p1: Point2D, p2: Point2D) => {
       const mask = maskCanvasRef.current;
@@ -246,11 +301,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       }
 
       const radSq = radius * radius;
-      const maskImgData = maskCtx.getImageData(minX, minY, bboxW, bboxH);
-      const maskPixels = maskImgData.data;
 
-      // Gentle Soft Eraser Mode
+      // ── ERASER MODE ──
       if (activeTool === 'eraser') {
+        const maskImgData = maskCtx.getImageData(minX, minY, bboxW, bboxH);
+        const maskPixels = maskImgData.data;
+
         for (let y = 0; y < bboxH; y++) {
           const canvasY = minY + y;
           for (let x = 0; x < bboxW; x++) {
@@ -267,8 +323,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
             if (minDistSq <= radSq) {
               const idx = (y * bboxW + x) * 4;
               const minDist = Math.sqrt(minDistSq);
-              const falloff = Math.max(0, 1 - minDist / radius);
-              const eraseAmount = Math.round(180 * falloff);
+              // Hardness controls the falloff curve
+              const normalizedDist = minDist / radius;
+              const hardnessFactor = brushHardness / 100;
+              // At 100% hardness: flat 1.0 until edge, then sharp drop
+              // At 0% hardness: smooth gaussian-like falloff
+              const falloff = Math.max(0, 1 - Math.pow(normalizedDist, 0.5 + hardnessFactor * 2.5));
+              const eraseAmount = Math.round(220 * falloff);
               maskPixels[idx + 3] = Math.max(0, maskPixels[idx + 3] - eraseAmount);
             }
           }
@@ -277,8 +338,9 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         return;
       }
 
-      // Smooth Edge-Preserving Smart Extractor Brush Mode
+      // ── FOREGROUND PAINT BRUSH MODE ──
       if (activeTool === 'brush') {
+        // Get room pixels to copy
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = width;
         tempCanvas.height = height;
@@ -288,7 +350,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
         const roomImgData = tempCtx.getImageData(minX, minY, bboxW, bboxH);
         const roomPixels = roomImgData.data;
-        const floorCol = getFloorColor();
+
+        const maskImgData = maskCtx.getImageData(minX, minY, bboxW, bboxH);
+        const maskPixels = maskImgData.data;
+
+        // Optionally get edge map for edge snapping
+        const edgeMap = edgeSnap ? getEdgeMap(roomImageKonva, width, height) : null;
 
         for (let y = 0; y < bboxH; y++) {
           const canvasY = minY + y;
@@ -305,26 +372,29 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
             if (minDistSq <= radSq) {
               const idx = (y * bboxW + x) * 4;
-              const r = roomPixels[idx];
-              const g = roomPixels[idx + 1];
-              const b = roomPixels[idx + 2];
 
-              const colorDist = Math.sqrt(
-                (r - floorCol.r) ** 2 +
-                (g - floorCol.g) ** 2 +
-                (b - floorCol.b) ** 2
-              );
-
-              // Smooth feathering from center to brush edge
+              // Hardness-based falloff
               const minDist = Math.sqrt(minDistSq);
-              const falloff = Math.max(0, 1 - minDist / radius);
-              const softAlpha = Math.round(255 * Math.pow(falloff, 0.7));
+              const normalizedDist = minDist / radius;
+              const hardnessFactor = brushHardness / 100;
+              const falloff = Math.max(0, 1 - Math.pow(normalizedDist, 0.5 + hardnessFactor * 2.5));
 
-              if (colorDist >= maskThreshold) {
-                maskPixels[idx] = r;
-                maskPixels[idx + 1] = g;
-                maskPixels[idx + 2] = b;
-                maskPixels[idx + 3] = Math.max(maskPixels[idx + 3], softAlpha);
+              // Edge snap: modulate alpha by edge strength
+              let edgeFactor = 1.0;
+              if (edgeMap) {
+                const es = getEdgeStrength(edgeMap, canvasX, canvasY, 30);
+                // Allow full painting on edges, reduce away from edges
+                edgeFactor = Math.max(0.15, es); // keep a minimum so brush isn't totally invisible off-edge
+              }
+
+              const alpha = Math.round(255 * falloff * edgeFactor);
+
+              // Only increase alpha, never decrease (accumulative painting)
+              if (alpha > maskPixels[idx + 3]) {
+                maskPixels[idx] = roomPixels[idx];
+                maskPixels[idx + 1] = roomPixels[idx + 1];
+                maskPixels[idx + 2] = roomPixels[idx + 2];
+                maskPixels[idx + 3] = alpha;
               }
             }
           }
@@ -333,10 +403,126 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         maskCtx.putImageData(maskImgData, minX, minY);
       }
     },
-    [roomImageKonva, brushSize, activeTool, containerSize, maskThreshold, getFloorColor]
+    [roomImageKonva, brushSize, brushHardness, activeTool, containerSize, edgeSnap]
   );
 
-  // Main Canvas Render Loop
+  // ─────────────────────────────────────────────────────
+  // MAGIC WAND: Flood-fill selection of similar-colored regions
+  // Copies all connected similar-color room pixels into the mask.
+  // ─────────────────────────────────────────────────────
+  const applyMagicWand = useCallback(
+    (clickPos: Point2D) => {
+      const mask = maskCanvasRef.current;
+      if (!mask || !roomImageKonva) return;
+      const maskCtx = mask.getContext('2d', { willReadFrequently: true });
+      if (!maskCtx) return;
+
+      const width = containerSize.width;
+      const height = containerSize.height;
+
+      // Get room pixels
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) return;
+      tempCtx.drawImage(roomImageKonva, 0, 0, width, height);
+      const roomImgData = tempCtx.getImageData(0, 0, width, height);
+      const roomPixels = roomImgData.data;
+
+      const maskImgData = maskCtx.getImageData(0, 0, width, height);
+      const maskPixels = maskImgData.data;
+
+      const startX = Math.round(clickPos.x);
+      const startY = Math.round(clickPos.y);
+      if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
+
+      const startIdx = (startY * width + startX) * 4;
+      const seedR = roomPixels[startIdx];
+      const seedG = roomPixels[startIdx + 1];
+      const seedB = roomPixels[startIdx + 2];
+
+      const tolerance = wandTolerance;
+      const tolSq = tolerance * tolerance * 3; // per-channel tolerance squared * 3 channels
+
+      // Visited bitmap
+      const visited = new Uint8Array(width * height);
+      const stack: number[] = [startX, startY];
+      visited[startY * width + startX] = 1;
+
+      while (stack.length > 0) {
+        const cy = stack.pop()!;
+        const cx = stack.pop()!;
+
+        const pixIdx = (cy * width + cx) * 4;
+        const dr = roomPixels[pixIdx] - seedR;
+        const dg = roomPixels[pixIdx + 1] - seedG;
+        const db = roomPixels[pixIdx + 2] - seedB;
+        const distSq = dr * dr + dg * dg + db * db;
+
+        if (distSq <= tolSq) {
+          // Copy room pixel into mask
+          maskPixels[pixIdx] = roomPixels[pixIdx];
+          maskPixels[pixIdx + 1] = roomPixels[pixIdx + 1];
+          maskPixels[pixIdx + 2] = roomPixels[pixIdx + 2];
+          maskPixels[pixIdx + 3] = 255;
+
+          // Push neighbors (4-connected)
+          const neighbors = [
+            [cx - 1, cy],
+            [cx + 1, cy],
+            [cx, cy - 1],
+            [cx, cy + 1],
+          ];
+          for (const [nx, ny] of neighbors) {
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[ny * width + nx]) {
+              visited[ny * width + nx] = 1;
+              stack.push(nx, ny);
+            }
+          }
+        }
+      }
+
+      // Apply soft edge anti-aliasing to the wand selection border
+      // We do a simple 2-pixel feather on the selection boundary
+      const feathered = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          if (maskPixels[idx + 3] === 255 && visited[y * width + x]) {
+            // Check if this is a border pixel (has a non-selected neighbor)
+            let isBorder = false;
+            for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) { isBorder = true; break; }
+              const nIdx = (ny * width + nx) * 4;
+              if (maskPixels[nIdx + 3] === 0 || !visited[ny * width + nx]) { isBorder = true; break; }
+            }
+            if (isBorder) feathered[y * width + x] = 1;
+          }
+        }
+      }
+
+      // Soften border pixels
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (feathered[y * width + x]) {
+            const idx = (y * width + x) * 4;
+            maskPixels[idx + 3] = 180; // slightly transparent border
+          }
+        }
+      }
+
+      maskCtx.putImageData(maskImgData, 0, 0);
+    },
+    [roomImageKonva, containerSize, wandTolerance]
+  );
+
+  // ─────────────────────────────────────────────────────
+  // MAIN CANVAS RENDER LOOP
+  // Layer order: Room → Shadow → Rug → Floor Texture → Mask → UI
+  // ─────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -346,40 +532,83 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Draw Room Background Image
+    // LAYER 1: Room Background Image
     if (roomImageKonva) {
       ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
     }
 
-    // 2. Draw 3D Perspective Rug & Contact Floor Shadow
+    // LAYER 2–5: Rug composite (only if rug + corners are set and not in "show original" mode)
     if (rugImageKonva && quadCorners && !showOriginal) {
+      // LAYER 2: Contact Floor Shadow
       drawQuadShadow(ctx, quadCorners, shadowOpacity);
+
+      // LAYER 3: Perspective-warped Rug
       drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 16, opacity);
 
-      // 3A. Draw Auto Darken Layer (Clipped to Floor Area so Rug stays bright and vibrant!)
-      if (activeTool === 'darken' && roomImageKonva && quadCorners) {
+      // LAYER 4: Floor Texture Blend (clipped to rug quad ONLY)
+      // Uses multiply blend on an offscreen canvas, then composites result
+      // This makes the rug pick up floor lighting/grain without becoming transparent
+      if (floorTextureStrength > 0 && roomImageKonva) {
         const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = quadCorners;
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(tl.x - 20, tl.y - 40);
-        ctx.lineTo(tr.x + 20, tr.y - 40);
-        ctx.lineTo(br.x + 40, br.y + 40);
-        ctx.lineTo(bl.x - 40, bl.y + 40);
-        ctx.closePath();
-        ctx.clip();
 
-        ctx.globalCompositeOperation = 'darken';
-        ctx.globalAlpha = darkenOpacity;
-        ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
+        // Create offscreen canvas with just the rug rendered on it
+        const rugOffscreen = document.createElement('canvas');
+        rugOffscreen.width = canvas.width;
+        rugOffscreen.height = canvas.height;
+        const rugCtx = rugOffscreen.getContext('2d');
+        if (rugCtx) {
+          // Draw rug on offscreen
+          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 16, 1);
+
+          // Create another offscreen for the multiply blend
+          const blendOffscreen = document.createElement('canvas');
+          blendOffscreen.width = canvas.width;
+          blendOffscreen.height = canvas.height;
+          const blendCtx = blendOffscreen.getContext('2d');
+          if (blendCtx) {
+            // Draw the rug first
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+
+            // Multiply the room image on top — this darkens the rug
+            // where the floor is dark, and preserves where the floor is light
+            blendCtx.globalCompositeOperation = 'multiply';
+            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+
+            // Now clip the result to only the rug shape using destination-in
+            blendCtx.globalCompositeOperation = 'destination-in';
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+
+            // Composite this blended result onto the main canvas at controlled strength
+            ctx.save();
+            ctx.globalAlpha = floorTextureStrength;
+            ctx.drawImage(blendOffscreen, 0, 0);
+            ctx.restore();
+          }
+        }
       }
 
-      // 3B. Draw Foreground Mask Overlay (Furniture / Box Cutouts sitting ON TOP of rug)
+      // LAYER 5: Foreground Mask Overlay (furniture cutouts ON TOP of rug)
       if (maskCanvasRef.current) {
         ctx.drawImage(maskCanvasRef.current, 0, 0);
       }
 
-      // 4. Draw Quad Handles, Box Cutout Preview, or Brush Ring Cursor
+      // MASK PREVIEW: tinted overlay showing what the user has painted
+      if (showMaskPreview && maskCanvasRef.current) {
+        const previewCanvas = document.createElement('canvas');
+        previewCanvas.width = canvas.width;
+        previewCanvas.height = canvas.height;
+        const previewCtx = previewCanvas.getContext('2d');
+        if (previewCtx) {
+          previewCtx.drawImage(maskCanvasRef.current, 0, 0);
+          // Tint the mask with a color overlay
+          previewCtx.globalCompositeOperation = 'source-atop';
+          previewCtx.fillStyle = 'rgba(99, 102, 241, 0.45)'; // indigo tint
+          previewCtx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(previewCanvas, 0, 0);
+        }
+      }
+
+      // LAYER 6: UI — Quad Handles, Box Preview, Brush Cursor
       if (activeTool === 'corners') {
         drawQuadHandles(ctx, quadCorners, hoveredCorner, activeCorner);
       } else if (activeTool === 'box' && boxStart && boxCurrent) {
@@ -403,6 +632,29 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.stroke();
+        // Draw center dot
+        ctx.beginPath();
+        ctx.arc(mousePos.x, mousePos.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = activeTool === 'brush' ? '#6366f1' : '#f43f5e';
+        ctx.fill();
+        ctx.restore();
+      } else if (activeTool === 'wand' && mousePos) {
+        // Crosshair cursor for wand
+        ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        const s = 10;
+        ctx.beginPath();
+        ctx.moveTo(mousePos.x - s, mousePos.y);
+        ctx.lineTo(mousePos.x + s, mousePos.y);
+        ctx.moveTo(mousePos.x, mousePos.y - s);
+        ctx.lineTo(mousePos.x, mousePos.y + s);
+        ctx.stroke();
+        // Small circle
+        ctx.beginPath();
+        ctx.arc(mousePos.x, mousePos.y, 4, 0, Math.PI * 2);
+        ctx.setLineDash([2, 2]);
+        ctx.stroke();
         ctx.restore();
       }
     }
@@ -417,11 +669,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     activeCorner,
     activeTool,
     brushSize,
-    darkenOpacity,
+    floorTextureStrength,
+    showMaskPreview,
     mousePos,
     isMouseDown,
     boxStart,
     boxCurrent,
+    historyVersion,
   ]);
 
   const drawQuadHandles = (
@@ -501,10 +755,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     lastPosRef.current = pos;
 
     if (activeTool === 'box') {
+      saveMaskSnapshot(); // save before box cutout
       setBoxStart(pos);
       setBoxCurrent(pos);
     } else if (activeTool === 'brush' || activeTool === 'eraser') {
+      saveMaskSnapshot(); // save before brush stroke
       applyBrushSegment(pos, pos);
+    } else if (activeTool === 'wand') {
+      saveMaskSnapshot(); // save before wand fill
+      applyMagicWand(pos);
     } else {
       const hit = getCornerAtPos(pos);
       if (hit) setActiveCorner(hit);
@@ -563,10 +822,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     lastPosRef.current = pos;
 
     if (activeTool === 'box') {
+      saveMaskSnapshot();
       setBoxStart(pos);
       setBoxCurrent(pos);
     } else if (activeTool === 'brush' || activeTool === 'eraser') {
+      saveMaskSnapshot();
       applyBrushSegment(pos, pos);
+    } else if (activeTool === 'wand') {
+      saveMaskSnapshot();
+      applyMagicWand(pos);
     } else {
       const hit = getCornerAtPos(pos);
       if (hit) setActiveCorner(hit);
@@ -617,6 +881,33 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (rugImageKonva && quadCorners && !showOriginal) {
       drawQuadShadow(ctx, quadCorners, shadowOpacity);
       drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
+
+      // Floor texture blend for export too
+      if (floorTextureStrength > 0 && roomImageKonva) {
+        const rugOffscreen = document.createElement('canvas');
+        rugOffscreen.width = canvas.width;
+        rugOffscreen.height = canvas.height;
+        const rugCtx = rugOffscreen.getContext('2d');
+        if (rugCtx) {
+          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
+          const blendOffscreen = document.createElement('canvas');
+          blendOffscreen.width = canvas.width;
+          blendOffscreen.height = canvas.height;
+          const blendCtx = blendOffscreen.getContext('2d');
+          if (blendCtx) {
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+            blendCtx.globalCompositeOperation = 'multiply';
+            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+            blendCtx.globalCompositeOperation = 'destination-in';
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+            ctx.save();
+            ctx.globalAlpha = floorTextureStrength;
+            ctx.drawImage(blendOffscreen, 0, 0);
+            ctx.restore();
+          }
+        }
+      }
+
       if (maskCanvasRef.current) {
         ctx.drawImage(maskCanvasRef.current, 0, 0, canvas.width, canvas.height);
       }
@@ -629,7 +920,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [currentProduct.id, roomImageKonva, rugImageKonva, quadCorners, showOriginal, opacity, shadowOpacity]);
+  }, [currentProduct.id, roomImageKonva, rugImageKonva, quadCorners, showOriginal, opacity, shadowOpacity, floorTextureStrength]);
 
   if (!selectedProductId || !selectedSize) {
     return (
@@ -650,7 +941,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       {/* Sidebar Controls */}
       <aside className="w-full lg:w-80 bg-[var(--bg-secondary)] p-4 border-b lg:border-b-0 lg:border-r border-[var(--border-secondary)] overflow-y-auto flex-shrink-0 z-10">
         <RoomSelector />
-        <VisualizerToolbar onExport={handleExport} onClearMask={clearMask} />
+        <VisualizerToolbar
+          onExport={handleExport}
+          onClearMask={clearMask}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+        />
       </aside>
 
       {/* Canvas Studio Area */}
@@ -675,14 +973,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Auto Darken Depth Layer"
-            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'darken' } })}
+            title="Floor Texture Blend"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'floorTexture' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
-              activeTool === 'darken' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
+              activeTool === 'floorTexture' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Blend</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Texture</span>
           </button>
 
           <button
@@ -699,7 +997,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Smart Edge Brush"
+            title="Foreground Paint Brush"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'brush' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'brush' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -707,6 +1005,18 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           >
             <Paintbrush className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Brush</span>
+          </button>
+
+          <button
+            type="button"
+            title="Magic Wand Select"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'wand' } })}
+            className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
+              activeTool === 'wand' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
+            }`}
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Wand</span>
           </button>
 
           <button
@@ -719,6 +1029,32 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           >
             <Eraser className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Erase</span>
+          </button>
+
+          <div className="w-px h-4 bg-[var(--border-secondary)] mx-1"></div>
+
+          <button
+            type="button"
+            title="Undo (Ctrl+Z)"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            className={`p-2 rounded transition-colors ${
+              canUndo ? 'hover:bg-[var(--bg-primary)]' : 'opacity-30 cursor-not-allowed'
+            }`}
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
+            title="Redo (Ctrl+Shift+Z)"
+            onClick={handleRedo}
+            disabled={!canRedo}
+            className={`p-2 rounded transition-colors ${
+              canRedo ? 'hover:bg-[var(--bg-primary)]' : 'opacity-30 cursor-not-allowed'
+            }`}
+          >
+            <Redo2 className="w-3.5 h-3.5" />
           </button>
 
           <div className="w-px h-4 bg-[var(--border-secondary)] mx-1"></div>
@@ -762,6 +1098,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
                 : hoveredCorner
                 ? 'cursor-grab'
                 : 'cursor-crosshair'
+              : activeTool === 'wand'
+              ? 'cursor-crosshair'
               : 'cursor-none'
           }`}
         />
@@ -770,11 +1108,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         {quadCorners && !showOriginal && (
           <div className="absolute bottom-4 right-4 pointer-events-none flex items-center space-x-2 bg-[var(--bg-secondary)]/90 text-[var(--text-primary)] backdrop-blur-md px-3 py-1.5 rounded-md text-[11px] font-medium border border-[var(--border-secondary)] shadow-sm">
             <Info className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-            {activeTool === 'corners' && <span>Drag 4 Corner handles to match floor perspective</span>}
-            {activeTool === 'darken' && <span>Auto darkening active - preserves object depth</span>}
-            {activeTool === 'box' && <span>Drag box over coffee table or bench to extract clean edges</span>}
-            {activeTool === 'brush' && <span>Paint table legs to render them above the rug</span>}
-            {activeTool === 'eraser' && <span>Paint over cutout areas to erase layer mask</span>}
+            {activeTool === 'corners' && <span>Drag 4 corner handles to match floor perspective</span>}
+            {activeTool === 'floorTexture' && <span>Floor texture blends room lighting into rug surface</span>}
+            {activeTool === 'box' && <span>Drag box over furniture to bring it above the rug</span>}
+            {activeTool === 'brush' && <span>Paint furniture to render it above the rug layer</span>}
+            {activeTool === 'wand' && <span>Click furniture to auto-select similar-colored region</span>}
+            {activeTool === 'eraser' && <span>Erase painted areas to reveal rug underneath</span>}
           </div>
         )}
 

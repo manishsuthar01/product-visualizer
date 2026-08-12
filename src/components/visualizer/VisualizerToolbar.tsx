@@ -5,26 +5,35 @@ import { products } from '@/data/products';
 import { getProduct } from './RoomVisualizer';
 import {
   Move,
-  Sparkles,
+  Layers,
   Square,
   Paintbrush,
   Eraser,
+  Wand2,
   RotateCcw,
   Eye,
   Download,
   Sliders,
-  Sun,
   Grid,
   Compass,
   Trash2,
+  Magnet,
+  EyeOff,
+  Lock,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 type VisualizerToolbarProps = {
   onExport: () => void;
   onClearMask: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
-export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerToolbarProps) {
+export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRedo, canUndo, canRedo }: VisualizerToolbarProps) {
   const {
     selectedProductId,
     selectedSize,
@@ -34,8 +43,12 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
     shadowOpacity,
     activeTool,
     brushSize,
-    darkenOpacity,
-    maskThreshold,
+    brushHardness,
+    edgeSnap,
+    showMaskPreview,
+    preserveMask,
+    floorTextureStrength,
+    wandTolerance,
   } = useVisualizerStore();
 
   const currentProduct = getProduct(selectedProductId || undefined);
@@ -129,15 +142,15 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
 
           <button
             type="button"
-            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'darken' } })}
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'floorTexture' } })}
             className={`flex flex-col items-center py-2 px-1 rounded text-[11px] font-medium transition-all ${
-              activeTool === 'darken'
+              activeTool === 'floorTexture'
                 ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
             }`}
           >
-            <Sparkles className="w-4 h-4 mb-1" />
-            <span>Auto Blend</span>
+            <Layers className="w-4 h-4 mb-1" />
+            <span>Floor Texture</span>
           </button>
 
           <button
@@ -154,7 +167,7 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">
           <button
             type="button"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'brush' } })}
@@ -165,7 +178,20 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
             }`}
           >
             <Paintbrush className="w-3.5 h-3.5 mb-0.5" />
-            <span>Smart Brush</span>
+            <span>Paint</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'wand' } })}
+            className={`flex flex-col items-center py-1.5 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'wand'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Wand2 className="w-3.5 h-3.5 mb-0.5" />
+            <span>Magic Wand</span>
           </button>
 
           <button
@@ -183,33 +209,33 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
         </div>
       </div>
 
-      {/* Auto Darken Tool Options Panel */}
-      {activeTool === 'darken' && (
+      {/* Floor Texture Tool Options Panel */}
+      {activeTool === 'floorTexture' && (
         <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-              Depth Blend Layer
+              <Layers className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+              Floor Texture Blend
             </span>
             <span className="text-[11px] font-mono font-medium text-[var(--text-secondary)]">
-              {Math.round(darkenOpacity * 100)}%
+              {Math.round(floorTextureStrength * 100)}%
             </span>
           </div>
 
           <div>
             <input
               type="range"
-              min="0.2"
-              max="1"
+              min="0"
+              max="0.7"
               step="0.05"
-              value={darkenOpacity}
-              onChange={(e) => dispatch({ type: 'SET_DARKEN_OPACITY', payload: { opacity: parseFloat(e.target.value) } })}
+              value={floorTextureStrength}
+              onChange={(e) => dispatch({ type: 'SET_FLOOR_TEXTURE_STRENGTH', payload: { strength: parseFloat(e.target.value) } })}
               className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
             />
           </div>
 
           <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-            Preserves table legs, shadows, and furniture structure seamlessly over the rug quad.
+            Blends the floor's lighting and grain into the rug surface using multiply compositing. Only affects the rug area — furniture stays crisp.
           </p>
         </div>
       )}
@@ -220,7 +246,7 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
               <Square className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-              Rectangular Box Mask
+              Rectangular Foreground Mask
             </span>
             <button
               type="button"
@@ -233,18 +259,61 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
           </div>
 
           <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-            Click and drag a rectangular region over furniture to extract sharp 90° edges above the floor rug layer.
+            Drag a rectangle over furniture to bring it above the rug. The selected area will render on top.
           </p>
         </div>
       )}
 
-      {/* Smart Brush Tool Options Panel */}
+      {/* Magic Wand Tool Options Panel */}
+      {activeTool === 'wand' && (
+        <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+              <Wand2 className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+              Magic Wand Select
+            </span>
+            <button
+              type="button"
+              onClick={onClearMask}
+              className="text-[11px] font-medium text-[var(--accent-terracotta)] hover:underline flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+
+          <div>
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1">
+              <span>Color Tolerance</span>
+              <span className="font-mono">{wandTolerance}</span>
+            </div>
+            <input
+              type="range"
+              min="5"
+              max="80"
+              step="1"
+              value={wandTolerance}
+              onChange={(e) => dispatch({ type: 'SET_WAND_TOLERANCE', payload: { tolerance: parseInt(e.target.value, 10) } })}
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
+            />
+            <span className="text-[10px] text-[var(--text-muted)] block mt-1">
+              Lower = stricter match. Higher = selects more similar colors.
+            </span>
+          </div>
+
+          <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
+            Click on furniture to auto-select a contiguous region of similar color. The selection renders above the rug.
+          </p>
+        </div>
+      )}
+
+      {/* Paint Brush / Eraser Tool Options Panel */}
       {(activeTool === 'brush' || activeTool === 'eraser') && (
         <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
               {activeTool === 'brush' ? <Paintbrush className="w-3.5 h-3.5 text-[var(--accent-gold)]" /> : <Eraser className="w-3.5 h-3.5 text-[var(--accent-terracotta)]" />}
-              {activeTool === 'brush' ? 'Edge Extraction Brush' : 'Erase Cutout Mask'}
+              {activeTool === 'brush' ? 'Foreground Paint Brush' : 'Erase Foreground Mask'}
             </span>
             <button
               type="button"
@@ -272,26 +341,129 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
             />
           </div>
 
+          <div>
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1">
+              <span>Edge Hardness</span>
+              <span className="font-mono">{brushHardness}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={brushHardness}
+              onChange={(e) => dispatch({ type: 'SET_BRUSH_HARDNESS', payload: { hardness: parseInt(e.target.value, 10) } })}
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
+            />
+            <span className="text-[10px] text-[var(--text-muted)] block mt-1">
+              0% = soft feathered edges · 100% = hard pixel edges
+            </span>
+          </div>
+
           {activeTool === 'brush' && (
-            <div>
-              <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1">
-                <span>Keying Sensitivity</span>
-                <span className="font-mono">{maskThreshold}</span>
-              </div>
-              <input
-                type="range"
-                min="10"
-                max="75"
-                step="5"
-                value={maskThreshold}
-                onChange={(e) => dispatch({ type: 'SET_MASK_THRESHOLD', payload: { threshold: parseInt(e.target.value, 10) } })}
-                className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
-              />
-              <span className="text-[10px] text-[var(--text-muted)] block mt-1">
-                Higher sensitivity isolates fine metal legs from background floor color.
-              </span>
+            <div className="flex items-center justify-between pt-1 border-t border-[var(--border-secondary)]">
+              <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
+                <Magnet className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+                Edge Snap
+              </label>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_EDGE_SNAP', payload: { enabled: !edgeSnap } })}
+                className={`relative w-8 h-4.5 rounded-full transition-colors ${
+                  edgeSnap ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                    edgeSnap ? 'translate-x-4' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Mask Management Options (visible for brush, wand, eraser, box) */}
+      {(activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'wand' || activeTool === 'box') && (
+        <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+              Mask Options
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+                className={`p-1.5 rounded transition-colors ${
+                  canUndo
+                    ? 'text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] cursor-pointer'
+                    : 'text-[var(--text-muted)] cursor-not-allowed opacity-40'
+                }`}
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                title="Redo (Ctrl+Shift+Z)"
+                className={`p-1.5 rounded transition-colors ${
+                  canRedo
+                    ? 'text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] cursor-pointer'
+                    : 'text-[var(--text-muted)] cursor-not-allowed opacity-40'
+                }`}
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
+              {showMaskPreview ? <Eye className="w-3.5 h-3.5 text-[var(--accent-gold)]" /> : <EyeOff className="w-3.5 h-3.5" />}
+              Show Mask Preview
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_SHOW_MASK_PREVIEW', payload: { enabled: !showMaskPreview } })}
+              className={`relative w-8 h-4.5 rounded-full transition-colors ${
+                showMaskPreview ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                  showMaskPreview ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
+              <Lock className="w-3.5 h-3.5" />
+              Preserve on Room Switch
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_PRESERVE_MASK', payload: { enabled: !preserveMask } })}
+              className={`relative w-8 h-4.5 rounded-full transition-colors ${
+                preserveMask ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                  preserveMask ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          <p className="text-[10px] text-[var(--text-muted)] leading-tight border-t border-[var(--border-secondary)] pt-2">
+            Ctrl+Z to undo · Ctrl+Shift+Z to redo
+          </p>
         </div>
       )}
 
@@ -392,7 +564,7 @@ export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerT
         <div className="space-y-3 bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border-secondary)]">
           <div>
             <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
-              <span>Texture Blend / Opacity</span>
+              <span>Rug Opacity</span>
               <span className="font-mono">{Math.round(opacity * 100)}%</span>
             </div>
             <input
