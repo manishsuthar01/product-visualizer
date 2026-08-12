@@ -25,6 +25,8 @@ const initialState: VisualizerState = {
   preserveMask: false,
   floorTextureStrength: 0.35,
   wandTolerance: 32,
+  wandContiguous: true,
+  showShortcutModal: false,
 };
 
 export const useVisualizerStore = create<VisualizerStore>((set) => ({
@@ -99,6 +101,10 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { floorTextureStrength: action.payload.strength };
         case 'SET_WAND_TOLERANCE':
           return { wandTolerance: action.payload.tolerance };
+        case 'SET_WAND_CONTIGUOUS':
+          return { wandContiguous: action.payload.contiguous };
+        case 'SET_SHOW_SHORTCUT_MODAL':
+          return { showShortcutModal: action.payload.open };
         case 'RESET_TRANSFORM':
           return {
             quadCorners: null, // Forces re-computation of default floor quad

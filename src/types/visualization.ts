@@ -37,6 +37,8 @@ export type VisualizerState = {
   preserveMask: boolean;       // when false, mask auto-clears on room switch
   floorTextureStrength: number; // 0–1: how much floor texture bleeds into the rug (was darkenOpacity)
   wandTolerance: number;       // 0–100: color tolerance for magic wand flood fill
+  wandContiguous: boolean;      // true = flood fill contiguous region, false = fill all matching pixels in room
+  showShortcutModal: boolean;   // true = display keyboard shortcuts cheat sheet
 };
 
 export type VisualizerAction =
@@ -61,4 +63,6 @@ export type VisualizerAction =
   | { type: 'SET_SHOW_MASK_PREVIEW'; payload: { enabled: boolean } }
   | { type: 'SET_PRESERVE_MASK'; payload: { enabled: boolean } }
   | { type: 'SET_FLOOR_TEXTURE_STRENGTH'; payload: { strength: number } }
-  | { type: 'SET_WAND_TOLERANCE'; payload: { tolerance: number } };
+  | { type: 'SET_WAND_TOLERANCE'; payload: { tolerance: number } }
+  | { type: 'SET_WAND_CONTIGUOUS'; payload: { contiguous: boolean } }
+  | { type: 'SET_SHOW_SHORTCUT_MODAL'; payload: { open: boolean } };
