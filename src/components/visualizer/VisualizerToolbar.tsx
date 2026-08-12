@@ -49,6 +49,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
     preserveMask,
     floorTextureStrength,
     wandTolerance,
+    wandContiguous,
   } = useVisualizerStore();
 
   const currentProduct = getProduct(selectedProductId || undefined);
@@ -301,8 +302,29 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
             </span>
           </div>
 
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border-secondary)]">
+            <label className="text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
+              Contiguous Fill Only
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_WAND_CONTIGUOUS', payload: { contiguous: !wandContiguous } })}
+              className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
+                wandContiguous ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  wandContiguous ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
           <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-            Click on furniture to auto-select a contiguous region of similar color. The selection renders above the rug.
+            {wandContiguous
+              ? 'Click furniture to select connected region of similar color. Hold Alt to subtract.'
+              : 'Click furniture to select ALL matching color pixels across the entire room. Hold Alt to subtract.'}
           </p>
         </div>
       )}
@@ -369,13 +391,13 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'SET_EDGE_SNAP', payload: { enabled: !edgeSnap } })}
-                className={`relative w-8 h-4.5 rounded-full transition-colors ${
+                className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
                   edgeSnap ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                    edgeSnap ? 'translate-x-4' : 'translate-x-0.5'
+                  className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                    edgeSnap ? 'translate-x-4' : 'translate-x-0'
                   }`}
                 />
               </button>
@@ -421,7 +443,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
               {showMaskPreview ? <Eye className="w-3.5 h-3.5 text-[var(--accent-gold)]" /> : <EyeOff className="w-3.5 h-3.5" />}
               Show Mask Preview
@@ -429,19 +451,19 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
             <button
               type="button"
               onClick={() => dispatch({ type: 'SET_SHOW_MASK_PREVIEW', payload: { enabled: !showMaskPreview } })}
-              className={`relative w-8 h-4.5 rounded-full transition-colors ${
+              className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
                 showMaskPreview ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
               }`}
             >
               <span
-                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                  showMaskPreview ? 'translate-x-4' : 'translate-x-0.5'
+                className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  showMaskPreview ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] font-medium cursor-pointer">
               <Lock className="w-3.5 h-3.5" />
               Preserve on Room Switch
@@ -449,13 +471,13 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
             <button
               type="button"
               onClick={() => dispatch({ type: 'SET_PRESERVE_MASK', payload: { enabled: !preserveMask } })}
-              className={`relative w-8 h-4.5 rounded-full transition-colors ${
+              className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors cursor-pointer ${
                 preserveMask ? 'bg-[var(--accent-gold)]' : 'bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]'
               }`}
             >
               <span
-                className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                  preserveMask ? 'translate-x-4' : 'translate-x-0.5'
+                className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  preserveMask ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
