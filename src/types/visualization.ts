@@ -7,6 +7,8 @@ export type QuadCorners = {
   bottomLeft: Point2D;
 };
 
+export type ActiveTool = 'corners' | 'darken' | 'brush' | 'box' | 'eraser';
+
 export type VisualizerState = {
   selectedProductId: string | null;
   selectedSize: {
@@ -27,6 +29,10 @@ export type VisualizerState = {
   brightness: number;
   shadowOpacity: number;
   showOriginal: boolean;
+  activeTool: ActiveTool;
+  brushSize: number;
+  maskThreshold: number;
+  darkenOpacity: number;
 };
 
 export type VisualizerAction =
@@ -43,4 +49,8 @@ export type VisualizerAction =
   | { type: 'RESET_TRANSFORM' }
   | { type: 'TOGGLE_BEFORE_AFTER' }
   | { type: 'SET_SIZE'; payload: { width: number; height: number } }
-  | { type: 'CLEAR_VISUALIZER' };
+  | { type: 'CLEAR_VISUALIZER' }
+  | { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
+  | { type: 'SET_BRUSH_SIZE'; payload: { size: number } }
+  | { type: 'SET_MASK_THRESHOLD'; payload: { threshold: number } }
+  | { type: 'SET_DARKEN_OPACITY'; payload: { opacity: number } };

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { sampleRooms } from '@/data/rooms';
 import { useVisualizerStore } from '@/hooks/useVisualizer';
+import { UploadCloud, Image as ImageIcon, RotateCcw, Check } from 'lucide-react';
 
 export default function RoomSelector() {
   const { roomImage, isCustomRoom, dispatch } = useVisualizerStore();
@@ -59,12 +60,14 @@ export default function RoomSelector() {
   };
 
   return (
-    <div className="mb-6 space-y-4">
+    <div className="mb-5 space-y-4">
       {/* Upload Room Photo Section */}
       <div>
-        <h3 className="text-sm font-bold text-gray-900 tracking-wide uppercase mb-2">
-          1. Choose Room Photo
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+            1. Room Environment
+          </label>
+        </div>
         
         <input
           type="file"
@@ -79,24 +82,22 @@ export default function RoomSelector() {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+          className={`flex flex-col items-center justify-center p-3.5 border border-dashed rounded-lg cursor-pointer transition-all ${
             isDragging
-              ? 'border-indigo-600 bg-indigo-50/50'
+              ? 'border-[var(--accent-gold)] bg-[var(--accent-gold)]/10'
               : isCustomRoom
-              ? 'border-emerald-500 bg-emerald-50/30'
-              : 'border-gray-300 hover:border-gray-400 bg-gray-50/50 hover:bg-gray-100/50'
+              ? 'border-[var(--accent-terracotta)]/50 bg-[var(--accent-terracotta)]/10'
+              : 'border-[var(--border-secondary)] hover:border-[var(--border-primary)] bg-[var(--bg-tertiary)]/50 hover:bg-[var(--bg-tertiary)]'
           }`}
         >
-          <div className="flex items-center space-x-2 text-gray-700 font-medium">
-            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span className="text-sm font-semibold">
-              {isCustomRoom ? 'Uploaded Room Photo' : 'Upload Your Room Photo'}
+          <div className="flex items-center space-x-2 text-[var(--text-primary)] font-medium">
+            <UploadCloud className="w-4 h-4 text-[var(--accent-gold)]" />
+            <span className="text-xs font-semibold">
+              {isCustomRoom ? 'Custom Room Loaded' : 'Upload Custom Room Photo'}
             </span>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            Drag & drop or click to upload JPG, PNG
+          <p className="text-[11px] text-[var(--text-secondary)] mt-1">
+            Drag & drop or browse image (JPG, PNG)
           </p>
         </div>
       </div>
@@ -104,15 +105,16 @@ export default function RoomSelector() {
       {/* Sample Rooms Selection */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Or Pick Sample Room
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+            Preset Environments
           </span>
           {isCustomRoom && (
             <button
               onClick={() => handleSelectRoom(sampleRooms[0].image as string)}
-              className="text-xs text-indigo-600 hover:underline font-medium"
+              className="inline-flex items-center space-x-1 text-[11px] text-[var(--accent-gold)] hover:text-[var(--accent-gold-hover)] font-medium"
             >
-              Reset to Sample
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset</span>
             </button>
           )}
         </div>
@@ -124,10 +126,10 @@ export default function RoomSelector() {
               <button
                 key={room.id}
                 type="button"
-                className={`relative h-20 w-full overflow-hidden rounded-lg border-2 text-left transition-all ${
+                className={`relative h-18 w-full overflow-hidden rounded-md border text-left transition-all ${
                   isSelected
-                    ? 'border-indigo-600 ring-2 ring-indigo-600/30'
-                    : 'border-gray-200 hover:border-gray-400'
+                    ? 'border-[var(--border-primary)] ring-1 ring-[var(--border-primary)]'
+                    : 'border-[var(--border-secondary)] hover:border-[var(--border-primary)] opacity-85 hover:opacity-100'
                 }`}
                 onClick={() => handleSelectRoom(room.image as string)}
               >
@@ -138,16 +140,14 @@ export default function RoomSelector() {
                   style={{ objectFit: 'cover' }}
                   sizes="160px"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 flex items-end">
-                  <span className="text-xs font-medium text-white line-clamp-1">
+                <div className="absolute inset-0 bg-gradient-to-t from-[var(--brand-earth)]/85 via-[var(--brand-earth)]/20 to-transparent p-2 flex items-end">
+                  <span className="text-[11px] font-medium text-[var(--bg-primary)] line-clamp-1">
                     {room.name}
                   </span>
                 </div>
                 {isSelected && (
-                  <div className="absolute top-1 right-1 bg-indigo-600 text-white p-0.5 rounded-full shadow">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div className="absolute top-1.5 right-1.5 bg-[var(--accent-gold)] text-[var(--brand-earth)] p-0.5 rounded shadow">
+                    <Check className="w-3 h-3 stroke-[3]" />
                   </div>
                 )}
               </button>
@@ -158,4 +158,6 @@ export default function RoomSelector() {
     </div>
   );
 }
+
+
 

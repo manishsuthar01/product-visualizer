@@ -17,6 +17,10 @@ const initialState: VisualizerState = {
   brightness: 0,
   shadowOpacity: 0.6,
   showOriginal: false,
+  activeTool: 'corners',
+  brushSize: 35,
+  maskThreshold: 30,
+  darkenOpacity: 0.75,
 };
 
 export const useVisualizerStore = create<VisualizerStore>((set) => ({
@@ -74,6 +78,14 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { brightness: action.payload.brightness };
         case 'SET_SHADOW_OPACITY':
           return { shadowOpacity: action.payload.shadowOpacity };
+        case 'SET_ACTIVE_TOOL':
+          return { activeTool: action.payload.tool };
+        case 'SET_BRUSH_SIZE':
+          return { brushSize: action.payload.size };
+        case 'SET_MASK_THRESHOLD':
+          return { maskThreshold: action.payload.threshold };
+        case 'SET_DARKEN_OPACITY':
+          return { darkenOpacity: action.payload.opacity };
         case 'RESET_TRANSFORM':
           return {
             quadCorners: null, // Forces re-computation of default floor quad
@@ -81,6 +93,7 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             opacity: 1,
             brightness: 0,
             shadowOpacity: 0.6,
+            darkenOpacity: 0.75,
           };
         case 'TOGGLE_BEFORE_AFTER':
           return { showOriginal: !state.showOriginal };

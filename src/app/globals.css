@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+:root {
+  --bg-primary: #F5F2EC;
+  --bg-secondary: #EAE3D8;
+  --bg-tertiary: #DFD6C9;
+  --text-primary: #2B2B2B;
+  --text-secondary: #595959;
+  --text-muted: #8C857E;
+  --border-primary: #2B2B2B;
+  --border-secondary: #D4CFC6;
+  --accent-gold: #B89970;
+  --accent-gold-hover: #B08A57;
+  --brand-earth: #3A312B;
+  --accent-terracotta: #C27D65;
+}
+
+@theme {
+  --color-linen-primary: var(--bg-primary);
+  --color-linen-secondary: var(--bg-secondary);
+  --color-linen-tertiary: var(--bg-tertiary);
+  --color-charcoal-primary: var(--text-primary);
+  --color-charcoal-secondary: var(--text-secondary);
+  --color-charcoal-muted: var(--text-muted);
+  --color-border-dark: var(--border-primary);
+  --color-border-light: var(--border-secondary);
+  --color-gold: var(--accent-gold);
+  --color-gold-hover: var(--accent-gold-hover);
+  --color-brand-earth: var(--brand-earth);
+  --color-terracotta: var(--accent-terracotta);
+}
+
 @layer base {
   html,
   body {
@@ -7,8 +37,8 @@
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
       Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
   }
 
   * {
@@ -22,19 +52,21 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--bg-secondary);
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-secondary);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--text-muted);
 }
 
 /* Custom Range Input Styling */
 input[type="range"] {
   height: 6px;
   border-radius: 3px;
+  accent-color: var(--accent-gold);
 }
+
 

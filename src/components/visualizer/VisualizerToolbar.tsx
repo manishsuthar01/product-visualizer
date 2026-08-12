@@ -3,12 +3,28 @@
 import { useVisualizerStore } from '@/hooks/useVisualizer';
 import { products } from '@/data/products';
 import { getProduct } from './RoomVisualizer';
+import {
+  Move,
+  Sparkles,
+  Square,
+  Paintbrush,
+  Eraser,
+  RotateCcw,
+  Eye,
+  Download,
+  Sliders,
+  Sun,
+  Grid,
+  Compass,
+  Trash2,
+} from 'lucide-react';
 
 type VisualizerToolbarProps = {
   onExport: () => void;
+  onClearMask: () => void;
 };
 
-export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) {
+export default function VisualizerToolbar({ onExport, onClearMask }: VisualizerToolbarProps) {
   const {
     selectedProductId,
     selectedSize,
@@ -16,7 +32,10 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
     showOriginal,
     opacity,
     shadowOpacity,
-    quadCorners,
+    activeTool,
+    brushSize,
+    darkenOpacity,
+    maskThreshold,
   } = useVisualizerStore();
 
   const currentProduct = getProduct(selectedProductId || undefined);
@@ -71,7 +90,6 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
         bottomLeft: { x: w * 0.12, y: h * 0.94 },
       };
     } else {
-      // Runner / Narrow
       corners = {
         topLeft: { x: w * 0.38, y: h * 0.55 },
         topRight: { x: w * 0.62, y: h * 0.55 },
@@ -88,17 +106,205 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
   };
 
   return (
-    <div className="space-y-6">
-      {/* 2. Select Rug Product */}
+    <div className="space-y-5 text-[var(--text-primary)]">
+      {/* 2. Interactive Studio Tools Selector */}
       <div>
-        <h3 className="text-sm font-bold text-gray-900 tracking-wide uppercase mb-2">
-          2. Choose Rug Design
-        </h3>
+        <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider block mb-2">
+          2. Object & Layer Tools
+        </label>
+        
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)] mb-1.5">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'corners' } })}
+            className={`flex flex-col items-center py-2 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'corners'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Move className="w-4 h-4 mb-1" />
+            <span>Corner Align</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'darken' } })}
+            className={`flex flex-col items-center py-2 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'darken'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 mb-1" />
+            <span>Auto Blend</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'box' } })}
+            className={`flex flex-col items-center py-2 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'box'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Square className="w-4 h-4 mb-1" />
+            <span>Box Cutout</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'brush' } })}
+            className={`flex flex-col items-center py-1.5 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'brush'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Paintbrush className="w-3.5 h-3.5 mb-0.5" />
+            <span>Smart Brush</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'eraser' } })}
+            className={`flex flex-col items-center py-1.5 px-1 rounded text-[11px] font-medium transition-all ${
+              activeTool === 'eraser'
+                ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+            }`}
+          >
+            <Eraser className="w-3.5 h-3.5 mb-0.5" />
+            <span>Erase Mask</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Auto Darken Tool Options Panel */}
+      {activeTool === 'darken' && (
+        <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+              Depth Blend Layer
+            </span>
+            <span className="text-[11px] font-mono font-medium text-[var(--text-secondary)]">
+              {Math.round(darkenOpacity * 100)}%
+            </span>
+          </div>
+
+          <div>
+            <input
+              type="range"
+              min="0.2"
+              max="1"
+              step="0.05"
+              value={darkenOpacity}
+              onChange={(e) => dispatch({ type: 'SET_DARKEN_OPACITY', payload: { opacity: parseFloat(e.target.value) } })}
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
+            />
+          </div>
+
+          <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
+            Preserves table legs, shadows, and furniture structure seamlessly over the rug quad.
+          </p>
+        </div>
+      )}
+
+      {/* Table Box Cutout Tool Options Panel */}
+      {activeTool === 'box' && (
+        <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+              <Square className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+              Rectangular Box Mask
+            </span>
+            <button
+              type="button"
+              onClick={onClearMask}
+              className="text-[11px] font-medium text-[var(--accent-terracotta)] hover:underline flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+
+          <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
+            Click and drag a rectangular region over furniture to extract sharp 90° edges above the floor rug layer.
+          </p>
+        </div>
+      )}
+
+      {/* Smart Brush Tool Options Panel */}
+      {(activeTool === 'brush' || activeTool === 'eraser') && (
+        <div className="bg-[var(--bg-tertiary)]/70 p-3 rounded-lg border border-[var(--border-secondary)] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+              {activeTool === 'brush' ? <Paintbrush className="w-3.5 h-3.5 text-[var(--accent-gold)]" /> : <Eraser className="w-3.5 h-3.5 text-[var(--accent-terracotta)]" />}
+              {activeTool === 'brush' ? 'Edge Extraction Brush' : 'Erase Cutout Mask'}
+            </span>
+            <button
+              type="button"
+              onClick={onClearMask}
+              className="text-[11px] font-medium text-[var(--accent-terracotta)] hover:underline flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+
+          <div>
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1">
+              <span>Brush Diameter</span>
+              <span className="font-mono">{brushSize}px</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="90"
+              step="5"
+              value={brushSize}
+              onChange={(e) => dispatch({ type: 'SET_BRUSH_SIZE', payload: { size: parseInt(e.target.value, 10) } })}
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
+            />
+          </div>
+
+          {activeTool === 'brush' && (
+            <div>
+              <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1">
+                <span>Keying Sensitivity</span>
+                <span className="font-mono">{maskThreshold}</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="75"
+                step="5"
+                value={maskThreshold}
+                onChange={(e) => dispatch({ type: 'SET_MASK_THRESHOLD', payload: { threshold: parseInt(e.target.value, 10) } })}
+                className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-secondary)] rounded-lg appearance-none"
+              />
+              <span className="text-[10px] text-[var(--text-muted)] block mt-1">
+                Higher sensitivity isolates fine metal legs from background floor color.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Select Rug Product */}
+      <div>
+        <label htmlFor="rug-product" className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider block mb-1.5">
+          3. Select Rug Model
+        </label>
         <select
           id="rug-product"
           value={currentProduct.id}
           onChange={handleProductChange}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-full rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] shadow-sm focus:border-[var(--border-primary)] focus:outline-none"
         >
           {products.map((prod) => (
             <option key={prod.id} value={prod.id}>
@@ -110,14 +316,14 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
 
       {/* Select Rug Size */}
       <div>
-        <label htmlFor="rug-size" className="block text-xs font-semibold text-gray-600 mb-1">
-          Rug Dimensions
+        <label htmlFor="rug-size" className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
+          Dimensions & Scale
         </label>
         <select
           id="rug-size"
           value={selectedSize ? `${selectedSize.width}x${selectedSize.height}` : ''}
           onChange={handleSizeChange}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-full rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] shadow-sm focus:border-[var(--border-primary)] focus:outline-none"
         >
           {currentProduct.sizes.map((size) => (
             <option key={size.label} value={`${size.width}x${size.height}`}>
@@ -127,65 +333,67 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
         </select>
       </div>
 
-      {/* 3. 3D Floor Perspective Presets */}
+      {/* 4. Floor Alignment Presets */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-bold text-gray-900 tracking-wide uppercase">
-            3. Floor Presets
-          </h3>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+            4. Perspective Presets
+          </label>
           <button
             onClick={handleResetQuad}
-            className="text-xs text-indigo-600 font-semibold hover:underline"
+            className="inline-flex items-center space-x-1 text-[11px] text-[var(--accent-gold)] hover:text-[var(--accent-gold-hover)] font-medium"
           >
-            Reset Corners
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Quad</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1.5">
           <button
             type="button"
             onClick={() => handleApplyPreset('center')}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors text-left"
+            className="flex items-center space-x-2 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
           >
-            📍 Center Floor
+            <Grid className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+            <span>Center Floor</span>
           </button>
           <button
             type="button"
             onClick={() => handleApplyPreset('wide')}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors text-left"
+            className="flex items-center space-x-2 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
           >
-            ↔️ Wide Area
+            <Move className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+            <span>Wide Area</span>
           </button>
           <button
             type="button"
             onClick={() => handleApplyPreset('deep')}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors text-left"
+            className="flex items-center space-x-2 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
           >
-            ↗️ Deep Room
+            <Compass className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+            <span>Deep Perspective</span>
           </button>
           <button
             type="button"
             onClick={() => handleApplyPreset('runner')}
-            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors text-left"
+            className="flex items-center space-x-2 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-colors text-left"
           >
-            🚶 Hallway Runner
+            <Sliders className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+            <span>Hallway Runner</span>
           </button>
         </div>
-        <p className="text-[11px] text-gray-500 mt-2">
-          💡 You can also drag the 4 corner handles directly on the canvas to match any floor angle!
-        </p>
       </div>
 
-      {/* 4. Floor Lighting & Blending */}
+      {/* 5. Floor Lighting & Depth */}
       <div>
-        <h3 className="text-sm font-bold text-gray-900 tracking-wide uppercase mb-2">
-          4. Floor Lighting & Depth
-        </h3>
-        <div className="space-y-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+        <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider block mb-1.5">
+          5. Lighting & Shadows
+        </label>
+        <div className="space-y-3 bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border-secondary)]">
           <div>
-            <div className="flex justify-between text-xs text-gray-600 mb-1 font-medium">
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
               <span>Texture Blend / Opacity</span>
-              <span>{Math.round(opacity * 100)}%</span>
+              <span className="font-mono">{Math.round(opacity * 100)}%</span>
             </div>
             <input
               type="range"
@@ -194,13 +402,13 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
               step="0.05"
               value={opacity}
               onChange={(e) => dispatch({ type: 'SET_OPACITY', payload: { opacity: parseFloat(e.target.value) } })}
-              className="w-full accent-indigo-600 cursor-pointer"
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
             />
           </div>
           <div>
-            <div className="flex justify-between text-xs text-gray-600 mb-1 font-medium">
+            <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
               <span>Contact Floor Shadow</span>
-              <span>{Math.round(shadowOpacity * 100)}%</span>
+              <span className="font-mono">{Math.round(shadowOpacity * 100)}%</span>
             </div>
             <input
               type="range"
@@ -209,39 +417,34 @@ export default function VisualizerToolbar({ onExport }: VisualizerToolbarProps) 
               step="0.05"
               value={shadowOpacity}
               onChange={(e) => dispatch({ type: 'SET_SHADOW_OPACITY', payload: { shadowOpacity: parseFloat(e.target.value) } })}
-              className="w-full accent-indigo-600 cursor-pointer"
+              className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
             />
           </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="space-y-2.5 pt-2">
+      {/* Studio Action Buttons */}
+      <div className="space-y-2 pt-2 border-t border-[var(--border-secondary)]">
         <button
           onClick={handleToggleBeforeAfter}
           type="button"
-          className={`flex w-full items-center justify-center space-x-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors shadow-sm ${
+          className={`flex w-full items-center justify-center space-x-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors ${
             showOriginal
-              ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ? 'border-[var(--accent-terracotta)] bg-[var(--accent-terracotta)]/15 text-[var(--accent-terracotta)]'
+              : 'border-[var(--border-secondary)] bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:border-[var(--border-primary)]'
           }`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
-          <span>{showOriginal ? 'Showing Before (Original)' : 'Toggle Before / After'}</span>
+          <Eye className="w-3.5 h-3.5" />
+          <span>{showOriginal ? 'Showing Before (Original)' : 'Toggle Compare View'}</span>
         </button>
 
         <button
           onClick={onExport}
           type="button"
-          className="flex w-full items-center justify-center space-x-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-indigo-700 active:bg-indigo-800 transition-colors"
+          className="flex w-full items-center justify-center space-x-2 rounded-md bg-[var(--brand-earth)] px-3 py-2.5 text-xs font-semibold text-[var(--bg-primary)] shadow hover:bg-[var(--accent-gold)] hover:text-[var(--text-primary)] transition-colors"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          <span>Download High-Res PNG</span>
+          <Download className="w-3.5 h-3.5" />
+          <span>Export Render PNG</span>
         </button>
       </div>
     </div>
