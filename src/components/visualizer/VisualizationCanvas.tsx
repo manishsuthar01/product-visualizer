@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import useImage from 'use-image';
 import Link from 'next/link';
 import { useVisualizerStore } from '@/hooks/useVisualizer';
+import { useCanvasZoom } from '@/hooks/useCanvasZoom';
 import { getProduct } from './RoomVisualizer';
 import { sampleRooms } from '@/data/rooms';
 import RoomSelector from './RoomSelector';
@@ -22,6 +23,12 @@ import {
   Wand2,
   Undo2,
   Redo2,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  HelpCircle,
+  X,
+  Keyboard,
 } from 'lucide-react';
 
 interface VisualizationCanvasProps {
@@ -46,6 +53,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     preserveMask,
     floorTextureStrength,
     wandTolerance,
+    wandContiguous,
+    showShortcutModal,
     dispatch,
   } = useVisualizerStore();
 
@@ -67,6 +76,26 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const [boxStart, setBoxStart] = useState<Point2D | null>(null);
   const [boxCurrent, setBoxCurrent] = useState<Point2D | null>(null);
 
+  // Keyboard modifiers state
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isAltPressed, setIsAltPressed] = useState(false);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
+
+  // Zoom & Pan Engine
+  const {
+    zoom,
+    pan,
+    isPanning,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    handleWheel,
+    startPan,
+    updatePan,
+    endPan,
+    screenToCanvas,
+  } = useCanvasZoom(1, 1, 4);
+
   // Track previous room image for conditional mask clearing
   const prevRoomImageRef = useRef<string | null>(null);
 
@@ -74,9 +103,9 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const MAX_HISTORY = 30;
   const undoStackRef = useRef<ImageData[]>([]);
   const redoStackRef = useRef<ImageData[]>([]);
-  const [historyVersion, setHistoryVersion] = useState(0); // bumped to trigger re-render for button states
+  const [historyVersion, setHistoryVersion] = useState(0);
 
-  /** Save the current mask state to the undo stack (call BEFORE modifying the mask). */
+  /** Save the current mask state to the undo stack */
   const saveMaskSnapshot = useCallback(() => {
     const mask = maskCanvasRef.current;
     if (!mask) return;
@@ -85,38 +114,33 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     const snapshot = ctx.getImageData(0, 0, mask.width, mask.height);
     undoStackRef.current.push(snapshot);
     if (undoStackRef.current.length > MAX_HISTORY) {
-      undoStackRef.current.shift(); // drop oldest
+      undoStackRef.current.shift();
     }
-    // Any new action invalidates the redo stack
     redoStackRef.current = [];
     setHistoryVersion((v) => v + 1);
   }, []);
 
-  /** Undo: restore previous mask state. */
+  /** Undo: restore previous mask state */
   const handleUndo = useCallback(() => {
     const mask = maskCanvasRef.current;
     if (!mask || undoStackRef.current.length === 0) return;
     const ctx = mask.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
-    // Save current state to redo stack
     const currentState = ctx.getImageData(0, 0, mask.width, mask.height);
     redoStackRef.current.push(currentState);
-    // Restore previous state
     const prevState = undoStackRef.current.pop()!;
     ctx.putImageData(prevState, 0, 0);
     setHistoryVersion((v) => v + 1);
   }, []);
 
-  /** Redo: restore next mask state. */
+  /** Redo: restore next mask state */
   const handleRedo = useCallback(() => {
     const mask = maskCanvasRef.current;
     if (!mask || redoStackRef.current.length === 0) return;
     const ctx = mask.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
-    // Save current state to undo stack
     const currentState = ctx.getImageData(0, 0, mask.width, mask.height);
     undoStackRef.current.push(currentState);
-    // Restore next state
     const nextState = redoStackRef.current.pop()!;
     ctx.putImageData(nextState, 0, 0);
     setHistoryVersion((v) => v + 1);
@@ -125,9 +149,26 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const canUndo = undoStackRef.current.length > 0;
   const canRedo = redoStackRef.current.length > 0;
 
-  // Keyboard shortcuts for undo/redo
+  // ─── KEYBOARD SHORTCUTS ENGINE ──────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in inputs
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      if (e.key === ' ' || e.code === 'Space') {
+        setIsSpacePressed(true);
+        e.preventDefault();
+      }
+      if (e.key === 'Alt') setIsAltPressed(true);
+      if (e.key === 'Shift') setIsShiftPressed(true);
+
+      // Undo / Redo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
@@ -138,10 +179,54 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         e.preventDefault();
         handleRedo();
       }
+
+      // Tool Switching Hotkeys
+      if (!e.ctrlKey && !e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'c':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'corners' } });
+            break;
+          case 'b':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'brush' } });
+            break;
+          case 'w':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'wand' } });
+            break;
+          case 'e':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'eraser' } });
+            break;
+          case 't':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'floorTexture' } });
+            break;
+          case 'x':
+            dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'box' } });
+            break;
+          case '[':
+            dispatch({ type: 'SET_BRUSH_SIZE', payload: { size: Math.max(10, brushSize - 5) } });
+            break;
+          case ']':
+            dispatch({ type: 'SET_BRUSH_SIZE', payload: { size: Math.min(90, brushSize + 5) } });
+            break;
+          case '?':
+            dispatch({ type: 'SET_SHOW_SHORTCUT_MODAL', payload: { open: !showShortcutModal } });
+            break;
+        }
+      }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.code === 'Space') setIsSpacePressed(false);
+      if (e.key === 'Alt') setIsAltPressed(false);
+      if (e.key === 'Shift') setIsShiftPressed(false);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleUndo, handleRedo, brushSize, showShortcutModal, dispatch]);
 
   // Initialize offscreen mask canvas
   useEffect(() => {
@@ -174,9 +259,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     prevRoomImageRef.current = roomImage;
   }, [roomImage, preserveMask, clearMask]);
 
-  // ─────────────────────────────────────────────────────
-  // BOX CUTOUT: copies room pixels into mask within a rect
-  // ─────────────────────────────────────────────────────
+  // Apply Box Cutout
   const applyBoxCutout = useCallback(
     (p1: Point2D, p2: Point2D) => {
       const mask = maskCanvasRef.current;
@@ -264,9 +347,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   }, [containerSize.width, containerSize.height, roomImage, quadCorners, dispatch]);
 
   // ─────────────────────────────────────────────────────
-  // PURE FOREGROUND PAINT BRUSH (no color keying!)
-  // Copies room pixels directly onto the mask canvas.
-  // The user paints furniture; those pixels show on top of rug.
+  // FOREGROUND PAINT BRUSH (with Alt subtract support)
   // ─────────────────────────────────────────────────────
   const applyBrushSegment = useCallback(
     (p1: Point2D, p2: Point2D) => {
@@ -301,9 +382,10 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       }
 
       const radSq = radius * radius;
+      const isEraserMode = activeTool === 'eraser' || isAltPressed;
 
-      // ── ERASER MODE ──
-      if (activeTool === 'eraser') {
+      // ── ERASER / SUBTRACT MODE ──
+      if (isEraserMode) {
         const maskImgData = maskCtx.getImageData(minX, minY, bboxW, bboxH);
         const maskPixels = maskImgData.data;
 
@@ -323,11 +405,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
             if (minDistSq <= radSq) {
               const idx = (y * bboxW + x) * 4;
               const minDist = Math.sqrt(minDistSq);
-              // Hardness controls the falloff curve
               const normalizedDist = minDist / radius;
               const hardnessFactor = brushHardness / 100;
-              // At 100% hardness: flat 1.0 until edge, then sharp drop
-              // At 0% hardness: smooth gaussian-like falloff
               const falloff = Math.max(0, 1 - Math.pow(normalizedDist, 0.5 + hardnessFactor * 2.5));
               const eraseAmount = Math.round(220 * falloff);
               maskPixels[idx + 3] = Math.max(0, maskPixels[idx + 3] - eraseAmount);
@@ -340,7 +419,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
       // ── FOREGROUND PAINT BRUSH MODE ──
       if (activeTool === 'brush') {
-        // Get room pixels to copy
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = width;
         tempCanvas.height = height;
@@ -354,7 +432,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         const maskImgData = maskCtx.getImageData(minX, minY, bboxW, bboxH);
         const maskPixels = maskImgData.data;
 
-        // Optionally get edge map for edge snapping
         const edgeMap = edgeSnap ? getEdgeMap(roomImageKonva, width, height) : null;
 
         for (let y = 0; y < bboxH; y++) {
@@ -372,24 +449,19 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
             if (minDistSq <= radSq) {
               const idx = (y * bboxW + x) * 4;
-
-              // Hardness-based falloff
               const minDist = Math.sqrt(minDistSq);
               const normalizedDist = minDist / radius;
               const hardnessFactor = brushHardness / 100;
               const falloff = Math.max(0, 1 - Math.pow(normalizedDist, 0.5 + hardnessFactor * 2.5));
 
-              // Edge snap: modulate alpha by edge strength
               let edgeFactor = 1.0;
               if (edgeMap) {
                 const es = getEdgeStrength(edgeMap, canvasX, canvasY, 30);
-                // Allow full painting on edges, reduce away from edges
-                edgeFactor = Math.max(0.15, es); // keep a minimum so brush isn't totally invisible off-edge
+                edgeFactor = Math.max(0.15, es);
               }
 
               const alpha = Math.round(255 * falloff * edgeFactor);
 
-              // Only increase alpha, never decrease (accumulative painting)
               if (alpha > maskPixels[idx + 3]) {
                 maskPixels[idx] = roomPixels[idx];
                 maskPixels[idx + 1] = roomPixels[idx + 1];
@@ -403,12 +475,11 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         maskCtx.putImageData(maskImgData, minX, minY);
       }
     },
-    [roomImageKonva, brushSize, brushHardness, activeTool, containerSize, edgeSnap]
+    [roomImageKonva, brushSize, brushHardness, activeTool, containerSize, edgeSnap, isAltPressed]
   );
 
   // ─────────────────────────────────────────────────────
-  // MAGIC WAND: Flood-fill selection of similar-colored regions
-  // Copies all connected similar-color room pixels into the mask.
+  // MAGIC WAND (supports contiguous & global fill mode)
   // ─────────────────────────────────────────────────────
   const applyMagicWand = useCallback(
     (clickPos: Point2D) => {
@@ -420,7 +491,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       const width = containerSize.width;
       const height = containerSize.height;
 
-      // Get room pixels
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = width;
       tempCanvas.height = height;
@@ -443,85 +513,79 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       const seedB = roomPixels[startIdx + 2];
 
       const tolerance = wandTolerance;
-      const tolSq = tolerance * tolerance * 3; // per-channel tolerance squared * 3 channels
+      const tolSq = tolerance * tolerance * 3;
 
-      // Visited bitmap
-      const visited = new Uint8Array(width * height);
-      const stack: number[] = [startX, startY];
-      visited[startY * width + startX] = 1;
+      const isSubtract = isAltPressed;
 
-      while (stack.length > 0) {
-        const cy = stack.pop()!;
-        const cx = stack.pop()!;
+      if (wandContiguous) {
+        // Contiguous 4-connected flood fill
+        const visited = new Uint8Array(width * height);
+        const stack: number[] = [startX, startY];
+        visited[startY * width + startX] = 1;
 
-        const pixIdx = (cy * width + cx) * 4;
-        const dr = roomPixels[pixIdx] - seedR;
-        const dg = roomPixels[pixIdx + 1] - seedG;
-        const db = roomPixels[pixIdx + 2] - seedB;
-        const distSq = dr * dr + dg * dg + db * db;
+        while (stack.length > 0) {
+          const cy = stack.pop()!;
+          const cx = stack.pop()!;
 
-        if (distSq <= tolSq) {
-          // Copy room pixel into mask
-          maskPixels[pixIdx] = roomPixels[pixIdx];
-          maskPixels[pixIdx + 1] = roomPixels[pixIdx + 1];
-          maskPixels[pixIdx + 2] = roomPixels[pixIdx + 2];
-          maskPixels[pixIdx + 3] = 255;
+          const pixIdx = (cy * width + cx) * 4;
+          const dr = roomPixels[pixIdx] - seedR;
+          const dg = roomPixels[pixIdx + 1] - seedG;
+          const db = roomPixels[pixIdx + 2] - seedB;
+          const distSq = dr * dr + dg * dg + db * db;
 
-          // Push neighbors (4-connected)
-          const neighbors = [
-            [cx - 1, cy],
-            [cx + 1, cy],
-            [cx, cy - 1],
-            [cx, cy + 1],
-          ];
-          for (const [nx, ny] of neighbors) {
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[ny * width + nx]) {
-              visited[ny * width + nx] = 1;
-              stack.push(nx, ny);
+          if (distSq <= tolSq) {
+            if (isSubtract) {
+              maskPixels[pixIdx + 3] = 0;
+            } else {
+              maskPixels[pixIdx] = roomPixels[pixIdx];
+              maskPixels[pixIdx + 1] = roomPixels[pixIdx + 1];
+              maskPixels[pixIdx + 2] = roomPixels[pixIdx + 2];
+              maskPixels[pixIdx + 3] = 255;
+            }
+
+            const neighbors = [
+              [cx - 1, cy],
+              [cx + 1, cy],
+              [cx, cy - 1],
+              [cx, cy + 1],
+            ];
+            for (const [nx, ny] of neighbors) {
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[ny * width + nx]) {
+                visited[ny * width + nx] = 1;
+                stack.push(nx, ny);
+              }
             }
           }
         }
-      }
-
-      // Apply soft edge anti-aliasing to the wand selection border
-      // We do a simple 2-pixel feather on the selection boundary
-      const feathered = new Uint8Array(width * height);
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          if (maskPixels[idx + 3] === 255 && visited[y * width + x]) {
-            // Check if this is a border pixel (has a non-selected neighbor)
-            let isBorder = false;
-            for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-              const nx = x + dx;
-              const ny = y + dy;
-              if (nx < 0 || nx >= width || ny < 0 || ny >= height) { isBorder = true; break; }
-              const nIdx = (ny * width + nx) * 4;
-              if (maskPixels[nIdx + 3] === 0 || !visited[ny * width + nx]) { isBorder = true; break; }
+      } else {
+        // Global color match across whole room
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const pixIdx = (y * width + x) * 4;
+            const dr = roomPixels[pixIdx] - seedR;
+            const dg = roomPixels[pixIdx + 1] - seedG;
+            const db = roomPixels[pixIdx + 2] - seedB;
+            if (dr * dr + dg * dg + db * db <= tolSq) {
+              if (isSubtract) {
+                maskPixels[pixIdx + 3] = 0;
+              } else {
+                maskPixels[pixIdx] = roomPixels[pixIdx];
+                maskPixels[pixIdx + 1] = roomPixels[pixIdx + 1];
+                maskPixels[pixIdx + 2] = roomPixels[pixIdx + 2];
+                maskPixels[pixIdx + 3] = 255;
+              }
             }
-            if (isBorder) feathered[y * width + x] = 1;
-          }
-        }
-      }
-
-      // Soften border pixels
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (feathered[y * width + x]) {
-            const idx = (y * width + x) * 4;
-            maskPixels[idx + 3] = 180; // slightly transparent border
           }
         }
       }
 
       maskCtx.putImageData(maskImgData, 0, 0);
     },
-    [roomImageKonva, containerSize, wandTolerance]
+    [roomImageKonva, containerSize, wandTolerance, wandContiguous, isAltPressed]
   );
 
   // ─────────────────────────────────────────────────────
-  // MAIN CANVAS RENDER LOOP
-  // Layer order: Room → Shadow → Rug → Floor Texture → Mask → UI
+  // MAIN CANVAS RENDER LOOP (with Zoom/Pan & Dual Ring Cursor)
   // ─────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -532,12 +596,22 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Apply Zoom & Pan transform matrix
+    ctx.save();
+    if (zoom > 1 || pan.x !== 0 || pan.y !== 0) {
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ctx.translate(cx + pan.x, cy + pan.y);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cx, -cy);
+    }
+
     // LAYER 1: Room Background Image
     if (roomImageKonva) {
       ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
     }
 
-    // LAYER 2–5: Rug composite (only if rug + corners are set and not in "show original" mode)
+    // LAYER 2–5: Rug composite
     if (rugImageKonva && quadCorners && !showOriginal) {
       // LAYER 2: Contact Floor Shadow
       drawQuadShadow(ctx, quadCorners, shadowOpacity);
@@ -545,40 +619,26 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       // LAYER 3: Perspective-warped Rug
       drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 16, opacity);
 
-      // LAYER 4: Floor Texture Blend (clipped to rug quad ONLY)
-      // Uses multiply blend on an offscreen canvas, then composites result
-      // This makes the rug pick up floor lighting/grain without becoming transparent
+      // LAYER 4: Floor Texture Blend
       if (floorTextureStrength > 0 && roomImageKonva) {
-        const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = quadCorners;
-
-        // Create offscreen canvas with just the rug rendered on it
         const rugOffscreen = document.createElement('canvas');
         rugOffscreen.width = canvas.width;
         rugOffscreen.height = canvas.height;
         const rugCtx = rugOffscreen.getContext('2d');
         if (rugCtx) {
-          // Draw rug on offscreen
           drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 16, 1);
 
-          // Create another offscreen for the multiply blend
           const blendOffscreen = document.createElement('canvas');
           blendOffscreen.width = canvas.width;
           blendOffscreen.height = canvas.height;
           const blendCtx = blendOffscreen.getContext('2d');
           if (blendCtx) {
-            // Draw the rug first
             blendCtx.drawImage(rugOffscreen, 0, 0);
-
-            // Multiply the room image on top — this darkens the rug
-            // where the floor is dark, and preserves where the floor is light
             blendCtx.globalCompositeOperation = 'multiply';
             blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-
-            // Now clip the result to only the rug shape using destination-in
             blendCtx.globalCompositeOperation = 'destination-in';
             blendCtx.drawImage(rugOffscreen, 0, 0);
 
-            // Composite this blended result onto the main canvas at controlled strength
             ctx.save();
             ctx.globalAlpha = floorTextureStrength;
             ctx.drawImage(blendOffscreen, 0, 0);
@@ -587,12 +647,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         }
       }
 
-      // LAYER 5: Foreground Mask Overlay (furniture cutouts ON TOP of rug)
+      // LAYER 5: Foreground Mask Overlay
       if (maskCanvasRef.current) {
         ctx.drawImage(maskCanvasRef.current, 0, 0);
       }
 
-      // MASK PREVIEW: tinted overlay showing what the user has painted
+      // MASK PREVIEW
       if (showMaskPreview && maskCanvasRef.current) {
         const previewCanvas = document.createElement('canvas');
         previewCanvas.width = canvas.width;
@@ -600,16 +660,16 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         const previewCtx = previewCanvas.getContext('2d');
         if (previewCtx) {
           previewCtx.drawImage(maskCanvasRef.current, 0, 0);
-          // Tint the mask with a color overlay
           previewCtx.globalCompositeOperation = 'source-atop';
-          previewCtx.fillStyle = 'rgba(99, 102, 241, 0.45)'; // indigo tint
+          previewCtx.fillStyle = 'rgba(99, 102, 241, 0.45)';
           previewCtx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(previewCanvas, 0, 0);
         }
       }
 
-      // LAYER 6: UI — Quad Handles, Box Preview, Brush Cursor
+      // LAYER 6: UI — Quad Handles, Box Preview, Dual-Ring Cursor, Perspective Grid
       if (activeTool === 'corners') {
+        drawPerspectiveGrid(ctx, quadCorners);
         drawQuadHandles(ctx, quadCorners, hoveredCorner, activeCorner);
       } else if (activeTool === 'box' && boxStart && boxCurrent) {
         ctx.save();
@@ -625,23 +685,51 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         ctx.fillRect(bx, by, bw, bh);
         ctx.restore();
       } else if ((activeTool === 'brush' || activeTool === 'eraser') && mousePos) {
+        const isEraserMode = activeTool === 'eraser' || isAltPressed;
+        const outerRadius = brushSize / 2;
+        const innerRadius = (brushSize / 2) * (brushHardness / 100);
+
         ctx.save();
+        // 1. Outer Ring (Full Diameter)
         ctx.beginPath();
-        ctx.arc(mousePos.x, mousePos.y, brushSize / 2, 0, Math.PI * 2);
-        ctx.strokeStyle = activeTool === 'brush' ? '#6366f1' : '#f43f5e';
+        ctx.arc(mousePos.x, mousePos.y, outerRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = isEraserMode ? '#f43f5e' : '#6366f1';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.stroke();
-        // Draw center dot
+
+        // 2. Inner Core Ring (Hardness core boundary)
+        if (brushHardness < 100 && innerRadius > 1) {
+          ctx.beginPath();
+          ctx.arc(mousePos.x, mousePos.y, innerRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = isEraserMode ? 'rgba(244, 63, 94, 0.6)' : 'rgba(99, 102, 241, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          ctx.stroke();
+        }
+
+        // 3. Center Dot
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = activeTool === 'brush' ? '#6366f1' : '#f43f5e';
+        ctx.fillStyle = isEraserMode ? '#f43f5e' : '#6366f1';
         ctx.fill();
+
+        // Subtraction indicator if Alt or Shift held
+        if (isAltPressed) {
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillText('–', mousePos.x + outerRadius + 4, mousePos.y + 4);
+        } else if (isShiftPressed) {
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = '#6366f1';
+          ctx.fillText('+', mousePos.x + outerRadius + 4, mousePos.y + 4);
+        }
+
         ctx.restore();
       } else if (activeTool === 'wand' && mousePos) {
-        // Crosshair cursor for wand
+        // Wand Cursor
         ctx.save();
-        ctx.strokeStyle = '#f59e0b';
+        ctx.strokeStyle = isAltPressed ? '#f43f5e' : '#f59e0b';
         ctx.lineWidth = 1.5;
         const s = 10;
         ctx.beginPath();
@@ -650,14 +738,23 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         ctx.moveTo(mousePos.x, mousePos.y - s);
         ctx.lineTo(mousePos.x, mousePos.y + s);
         ctx.stroke();
-        // Small circle
+
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, 4, 0, Math.PI * 2);
         ctx.setLineDash([2, 2]);
         ctx.stroke();
+
+        if (isAltPressed) {
+          ctx.font = 'bold 11px sans-serif';
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillText('–', mousePos.x + 12, mousePos.y + 4);
+        }
+
         ctx.restore();
       }
     }
+
+    ctx.restore(); // restore zoom & pan matrix
   }, [
     roomImageKonva,
     rugImageKonva,
@@ -669,6 +766,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     activeCorner,
     activeTool,
     brushSize,
+    brushHardness,
     floorTextureStrength,
     showMaskPreview,
     mousePos,
@@ -676,7 +774,52 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     boxStart,
     boxCurrent,
     historyVersion,
+    zoom,
+    pan,
+    isAltPressed,
+    isShiftPressed,
   ]);
+
+  // Perspective Vanishing Point Grid Helper
+  const drawPerspectiveGrid = (ctx: CanvasRenderingContext2D, corners: QuadCorners) => {
+    const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(184, 153, 112, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+
+    const steps = 4;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const leftPt = {
+        x: (1 - t) * tl.x + t * bl.x,
+        y: (1 - t) * tl.y + t * bl.y,
+      };
+      const rightPt = {
+        x: (1 - t) * tr.x + t * br.x,
+        y: (1 - t) * tr.y + t * br.y,
+      };
+      ctx.beginPath();
+      ctx.moveTo(leftPt.x, leftPt.y);
+      ctx.lineTo(rightPt.x, rightPt.y);
+      ctx.stroke();
+
+      const topPt = {
+        x: (1 - t) * tl.x + t * tr.x,
+        y: (1 - t) * tl.y + t * tr.y,
+      };
+      const bottomPt = {
+        x: (1 - t) * bl.x + t * br.x,
+        y: (1 - t) * bl.y + t * br.y,
+      };
+      ctx.beginPath();
+      ctx.moveTo(topPt.x, topPt.y);
+      ctx.lineTo(bottomPt.x, bottomPt.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
 
   const drawQuadHandles = (
     ctx: CanvasRenderingContext2D,
@@ -744,25 +887,33 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
   const lastPosRef = useRef<Point2D | null>(null);
 
+  // Mouse Event Handlers mapped through Zoom screenToCanvas
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (showOriginal || !quadCorners) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    // Pan mode (Space key or middle click)
+    if (isSpacePressed || e.button === 1) {
+      startPan({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    const pos = screenToCanvas(e.clientX, e.clientY, rect, containerSize.width, containerSize.height);
 
     setIsMouseDown(true);
     setMousePos(pos);
     lastPosRef.current = pos;
 
     if (activeTool === 'box') {
-      saveMaskSnapshot(); // save before box cutout
+      saveMaskSnapshot();
       setBoxStart(pos);
       setBoxCurrent(pos);
     } else if (activeTool === 'brush' || activeTool === 'eraser') {
-      saveMaskSnapshot(); // save before brush stroke
+      saveMaskSnapshot();
       applyBrushSegment(pos, pos);
     } else if (activeTool === 'wand') {
-      saveMaskSnapshot(); // save before wand fill
+      saveMaskSnapshot();
       applyMagicWand(pos);
     } else {
       const hit = getCornerAtPos(pos);
@@ -774,7 +925,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (showOriginal || !quadCorners) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+    if (isPanning) {
+      updatePan({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
+    const pos = screenToCanvas(e.clientX, e.clientY, rect, containerSize.width, containerSize.height);
 
     setMousePos(pos);
 
@@ -800,6 +957,10 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   };
 
   const handleMouseUp = () => {
+    if (isPanning) {
+      endPan();
+      return;
+    }
     if (isMouseDown && activeTool === 'box' && boxStart && boxCurrent) {
       applyBoxCutout(boxStart, boxCurrent);
     }
@@ -815,7 +976,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const touch = e.touches[0];
-    const pos = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    const pos = screenToCanvas(touch.clientX, touch.clientY, rect, containerSize.width, containerSize.height);
 
     setIsMouseDown(true);
     setMousePos(pos);
@@ -842,7 +1003,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const touch = e.touches[0];
-    const pos = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    const pos = screenToCanvas(touch.clientX, touch.clientY, rect, containerSize.width, containerSize.height);
 
     setMousePos(pos);
 
@@ -882,7 +1043,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       drawQuadShadow(ctx, quadCorners, shadowOpacity);
       drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
 
-      // Floor texture blend for export too
       if (floorTextureStrength > 0 && roomImageKonva) {
         const rugOffscreen = document.createElement('canvas');
         rugOffscreen.width = canvas.width;
@@ -961,7 +1121,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center space-x-1 bg-[var(--bg-secondary)]/90 backdrop-blur-md p-1 rounded-lg border border-[var(--border-secondary)] shadow-md text-[var(--text-primary)] text-xs">
           <button
             type="button"
-            title="Corner Perspective Tool"
+            title="Corner Perspective Tool (C)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'corners' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'corners' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -973,7 +1133,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Floor Texture Blend"
+            title="Floor Texture Blend (T)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'floorTexture' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'floorTexture' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -985,7 +1145,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Box Cutout Tool"
+            title="Box Cutout Tool (X)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'box' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'box' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -997,7 +1157,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Foreground Paint Brush"
+            title="Foreground Paint Brush (B)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'brush' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'brush' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -1009,7 +1169,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Magic Wand Select"
+            title="Magic Wand Select (W)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'wand' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'wand' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -1021,7 +1181,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <button
             type="button"
-            title="Eraser Mask"
+            title="Eraser Mask (E)"
             onClick={() => dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'eraser' } })}
             className={`p-2 rounded flex items-center space-x-1.5 font-medium transition-colors ${
               activeTool === 'eraser' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'hover:bg-[var(--bg-primary)]'
@@ -1059,6 +1219,38 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <div className="w-px h-4 bg-[var(--border-secondary)] mx-1"></div>
 
+          {/* Zoom Controls */}
+          <button
+            type="button"
+            title="Zoom In"
+            onClick={zoomIn}
+            className="p-2 rounded hover:bg-[var(--bg-primary)] transition-colors"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
+            title="Zoom Out"
+            onClick={zoomOut}
+            className="p-2 rounded hover:bg-[var(--bg-primary)] transition-colors"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+
+          {zoom > 1 && (
+            <button
+              type="button"
+              title="Reset Zoom (100%)"
+              onClick={resetZoom}
+              className="px-1.5 py-1 text-[11px] font-mono font-medium rounded hover:bg-[var(--bg-primary)] text-[var(--accent-gold)] transition-colors"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+          )}
+
+          <div className="w-px h-4 bg-[var(--border-secondary)] mx-1"></div>
+
           <button
             type="button"
             title="Toggle Compare"
@@ -1078,12 +1270,22 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           >
             <Download className="w-3.5 h-3.5" />
           </button>
+
+          <button
+            type="button"
+            title="Keyboard Shortcuts Cheat Sheet (?)"
+            onClick={() => dispatch({ type: 'SET_SHOW_SHORTCUT_MODAL', payload: { open: true } })}
+            className="p-2 rounded hover:bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--accent-gold)] transition-colors"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         <canvas
           ref={canvasRef}
           width={containerSize.width}
           height={containerSize.height}
+          onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -1092,7 +1294,11 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           onTouchMove={handleTouchMove}
           onTouchEnd={handleMouseUp}
           className={`shadow-xl border border-[var(--border-secondary)] ${
-            activeTool === 'corners'
+            isSpacePressed || isPanning
+              ? isPanning
+                ? 'cursor-grabbing'
+                : 'cursor-grab'
+              : activeTool === 'corners'
               ? activeCorner
                 ? 'cursor-grabbing'
                 : hoveredCorner
@@ -1108,18 +1314,87 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         {quadCorners && !showOriginal && (
           <div className="absolute bottom-4 right-4 pointer-events-none flex items-center space-x-2 bg-[var(--bg-secondary)]/90 text-[var(--text-primary)] backdrop-blur-md px-3 py-1.5 rounded-md text-[11px] font-medium border border-[var(--border-secondary)] shadow-sm">
             <Info className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-            {activeTool === 'corners' && <span>Drag 4 corner handles to match floor perspective</span>}
+            {activeTool === 'corners' && <span>Drag corner handles · Vanishing point guides enabled</span>}
             {activeTool === 'floorTexture' && <span>Floor texture blends room lighting into rug surface</span>}
             {activeTool === 'box' && <span>Drag box over furniture to bring it above the rug</span>}
-            {activeTool === 'brush' && <span>Paint furniture to render it above the rug layer</span>}
-            {activeTool === 'wand' && <span>Click furniture to auto-select similar-colored region</span>}
-            {activeTool === 'eraser' && <span>Erase painted areas to reveal rug underneath</span>}
+            {activeTool === 'brush' && <span>Paint furniture · Hold Alt to subtract · [ / ] to resize</span>}
+            {activeTool === 'wand' && <span>Click furniture to select · Hold Alt to subtract region</span>}
+            {activeTool === 'eraser' && <span>Erase painted mask areas</span>}
+            {zoom > 1 && <span className="font-mono text-[var(--accent-gold)]">({Math.round(zoom * 100)}% Zoom)</span>}
           </div>
         )}
 
         {showOriginal && (
           <div className="absolute top-4 right-4 pointer-events-none bg-[var(--accent-terracotta)] text-[var(--bg-primary)] backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-bold shadow">
             BEFORE (Original Image)
+          </div>
+        )}
+
+        {/* KEYBOARD SHORTCUTS CHEAT SHEET MODAL */}
+        {showShortcutModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-xl shadow-2xl w-full max-w-md p-5 text-[var(--text-primary)] relative space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
+                <div className="flex items-center gap-2 font-semibold text-sm">
+                  <Keyboard className="w-4 h-4 text-[var(--accent-gold)]" />
+                  <span>Studio Keyboard Shortcuts</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dispatch({ type: 'SET_SHOW_SHORTCUT_MODAL', payload: { open: false } })}
+                  className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 text-xs">
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Corner Tool</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">C</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Paint Brush</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">B</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Magic Wand</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">W</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Eraser Tool</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">E</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Floor Texture</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">T</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Box Cutout</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">X</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Undo Action</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">Ctrl + Z</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Redo Action</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">Ctrl + Shift + Z</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Resize Brush</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]"> [ / ] </kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Subtract Mask</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">Hold Alt</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60 col-span-2">
+                  <span className="text-[var(--text-secondary)]">Pan Zoomed Canvas</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">Space + Drag</kbd>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
