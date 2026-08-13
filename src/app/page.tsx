@@ -1,7 +1,7 @@
 import ProductCard from '@/components/products/ProductCard';
 import { products } from '@/data/products';
 import Link from 'next/link';
-import { Sparkles, UploadCloud, SlidersHorizontal, Eye, ArrowRight, ShieldCheck, Layers, Grid } from 'lucide-react';
+import { Sparkles, UploadCloud, SlidersHorizontal, Eye, ArrowRight, Layers, Grid } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -133,7 +133,7 @@ export default function Home() {
       <footer className="mt-20 border-t border-[var(--border-secondary)] bg-[var(--bg-secondary)] py-10 text-center text-xs text-[var(--text-muted)]">
         <div className="mx-auto max-w-7xl px-4">
           <p className="font-semibold text-[var(--text-primary)] mb-1">House of Décor — Floor Visualizer Studio</p>
-          <p>© 2026 House of Décor. Built with Next.js, Konva & Tailwind CSS.</p>
+          <p>© 2026 House of Décor. Built with Next.js, HTML5 Canvas 2D & Tailwind CSS.</p>
         </div>
       </footer>
     </div>
