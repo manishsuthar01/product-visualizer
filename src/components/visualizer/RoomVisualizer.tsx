@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { products } from '@/data/products';
-import { Layers, ArrowLeft, SlidersHorizontal, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
-// Dynamically import the visualization canvas (Konva) only on the client
+// Dynamically import the visualization canvas only on the client
 const VisualizationCanvas = dynamic(
   () => import('./VisualizationCanvas'),
   { ssr: false, loading: () => <CanvasSkeleton /> }
@@ -30,12 +30,14 @@ function CanvasSkeleton() {
   );
 }
 
-export default function RoomVisualizer({ searchParams }: RoomVisualizerProps) {
-  const [mounted, setMounted] = useState(false);
+const emptySubscribe = () => () => {};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+export default function RoomVisualizer({ searchParams }: RoomVisualizerProps) {
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   // Parse initial size from URL params, e.g. "5x8" -> { width: 5, height: 8 }
   const initialSize = (() => {

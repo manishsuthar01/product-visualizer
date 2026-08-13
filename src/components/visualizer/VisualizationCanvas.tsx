@@ -25,7 +25,6 @@ import {
   Redo2,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   HelpCircle,
   X,
   Keyboard,
@@ -146,8 +145,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     setHistoryVersion((v) => v + 1);
   }, []);
 
-  const canUndo = undoStackRef.current.length > 0;
-  const canRedo = redoStackRef.current.length > 0;
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  useEffect(() => {
+    setCanUndo(undoStackRef.current.length > 0);
+    setCanRedo(redoStackRef.current.length > 0);
+  }, [historyVersion]);
 
   // ─── KEYBOARD SHORTCUTS ENGINE ──────────────────────
   useEffect(() => {
@@ -584,6 +588,96 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     [roomImageKonva, containerSize, wandTolerance, wandContiguous, isAltPressed]
   );
 
+  // Perspective Vanishing Point Grid Helper
+  const drawPerspectiveGrid = (ctx: CanvasRenderingContext2D, corners: QuadCorners) => {
+    const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(184, 153, 112, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+
+    const steps = 4;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const leftPt = {
+        x: (1 - t) * tl.x + t * bl.x,
+        y: (1 - t) * tl.y + t * bl.y,
+      };
+      const rightPt = {
+        x: (1 - t) * tr.x + t * br.x,
+        y: (1 - t) * tr.y + t * br.y,
+      };
+      ctx.beginPath();
+      ctx.moveTo(leftPt.x, leftPt.y);
+      ctx.lineTo(rightPt.x, rightPt.y);
+      ctx.stroke();
+
+      const topPt = {
+        x: (1 - t) * tl.x + t * tr.x,
+        y: (1 - t) * tl.y + t * tr.y,
+      };
+      const bottomPt = {
+        x: (1 - t) * bl.x + t * br.x,
+        y: (1 - t) * bl.y + t * br.y,
+      };
+      ctx.beginPath();
+      ctx.moveTo(topPt.x, topPt.y);
+      ctx.lineTo(bottomPt.x, bottomPt.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  const drawQuadHandles = (
+    ctx: CanvasRenderingContext2D,
+    corners: QuadCorners,
+    hovered: keyof QuadCorners | null,
+    active: keyof QuadCorners | null
+  ) => {
+    const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
+
+    ctx.save();
+    ctx.strokeStyle = '#B89970';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+
+    ctx.beginPath();
+    ctx.moveTo(tl.x, tl.y);
+    ctx.lineTo(tr.x, tr.y);
+    ctx.lineTo(br.x, br.y);
+    ctx.lineTo(bl.x, bl.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    const handleList: { key: keyof QuadCorners; point: Point2D }[] = [
+      { key: 'topLeft', point: tl },
+      { key: 'topRight', point: tr },
+      { key: 'bottomRight', point: br },
+      { key: 'bottomLeft', point: bl },
+    ];
+
+    for (const h of handleList) {
+      const isSelected = active === h.key || hovered === h.key;
+      const radius = isSelected ? 8 : 6;
+
+      ctx.beginPath();
+      ctx.arc(h.point.x, h.point.y, radius + 3, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? 'rgba(184, 153, 112, 0.35)' : 'rgba(43, 43, 43, 0.25)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(h.point.x, h.point.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? '#B89970' : '#F5F2EC';
+      ctx.strokeStyle = '#3A312B';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  };
+
   // ─────────────────────────────────────────────────────
   // MAIN CANVAS RENDER LOOP (with Zoom/Pan & Dual Ring Cursor)
   // ─────────────────────────────────────────────────────
@@ -780,95 +874,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     isShiftPressed,
   ]);
 
-  // Perspective Vanishing Point Grid Helper
-  const drawPerspectiveGrid = (ctx: CanvasRenderingContext2D, corners: QuadCorners) => {
-    const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
 
-    ctx.save();
-    ctx.strokeStyle = 'rgba(184, 153, 112, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-
-    const steps = 4;
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      const leftPt = {
-        x: (1 - t) * tl.x + t * bl.x,
-        y: (1 - t) * tl.y + t * bl.y,
-      };
-      const rightPt = {
-        x: (1 - t) * tr.x + t * br.x,
-        y: (1 - t) * tr.y + t * br.y,
-      };
-      ctx.beginPath();
-      ctx.moveTo(leftPt.x, leftPt.y);
-      ctx.lineTo(rightPt.x, rightPt.y);
-      ctx.stroke();
-
-      const topPt = {
-        x: (1 - t) * tl.x + t * tr.x,
-        y: (1 - t) * tl.y + t * tr.y,
-      };
-      const bottomPt = {
-        x: (1 - t) * bl.x + t * br.x,
-        y: (1 - t) * bl.y + t * br.y,
-      };
-      ctx.beginPath();
-      ctx.moveTo(topPt.x, topPt.y);
-      ctx.lineTo(bottomPt.x, bottomPt.y);
-      ctx.stroke();
-    }
-    ctx.restore();
-  };
-
-  const drawQuadHandles = (
-    ctx: CanvasRenderingContext2D,
-    corners: QuadCorners,
-    hovered: keyof QuadCorners | null,
-    active: keyof QuadCorners | null
-  ) => {
-    const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
-
-    ctx.save();
-    ctx.strokeStyle = '#B89970';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-
-    ctx.beginPath();
-    ctx.moveTo(tl.x, tl.y);
-    ctx.lineTo(tr.x, tr.y);
-    ctx.lineTo(br.x, br.y);
-    ctx.lineTo(bl.x, bl.y);
-    ctx.closePath();
-    ctx.stroke();
-
-    const handleList: { key: keyof QuadCorners; point: Point2D }[] = [
-      { key: 'topLeft', point: tl },
-      { key: 'topRight', point: tr },
-      { key: 'bottomRight', point: br },
-      { key: 'bottomLeft', point: bl },
-    ];
-
-    for (const h of handleList) {
-      const isSelected = active === h.key || hovered === h.key;
-      const radius = isSelected ? 8 : 6;
-
-      ctx.beginPath();
-      ctx.arc(h.point.x, h.point.y, radius + 3, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? 'rgba(184, 153, 112, 0.35)' : 'rgba(43, 43, 43, 0.25)';
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(h.point.x, h.point.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#B89970' : '#F5F2EC';
-      ctx.strokeStyle = '#3A312B';
-      ctx.lineWidth = 2;
-      ctx.fill();
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  };
 
   const getCornerAtPos = (pos: Point2D): keyof QuadCorners | null => {
     if (!quadCorners) return null;
