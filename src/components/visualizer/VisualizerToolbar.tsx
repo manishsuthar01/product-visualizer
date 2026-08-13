@@ -236,7 +236,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
           </div>
 
           <p className="text-[11px] text-[var(--text-secondary)] leading-tight">
-            Blends the floor's lighting and grain into the rug surface using multiply compositing. Only affects the rug area — furniture stays crisp.
+            Blends the floor&apos;s lighting and grain into the rug surface using multiply compositing. Only affects the rug area — furniture stays crisp.
           </p>
         </div>
       )}
@@ -521,7 +521,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
         >
           {currentProduct.sizes.map((size) => (
             <option key={size.label} value={`${size.width}x${size.height}`}>
-              {size.label} ({size.width}' × {size.height}')
+              {size.label} ({size.width}&apos; &times; {size.height}&apos;)
             </option>
           ))}
         </select>

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { products } from '@/data/products';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Eye, Check, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Eye, ShieldCheck } from 'lucide-react';
 
 type Params = {
   params: Promise<{
@@ -100,7 +100,7 @@ export default async function ProductPage({ params }: Params) {
                   >
                     <span>{size.label}</span>
                     <span className="text-[11px] text-[var(--text-secondary)] font-mono group-hover:text-[var(--accent-gold)]">
-                      ({size.width}' × {size.height}')
+                      ({size.width}&apos; &times; {size.height}&apos;)
                     </span>
                   </Link>
                 ))}

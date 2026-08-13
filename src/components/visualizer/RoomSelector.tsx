@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { sampleRooms } from '@/data/rooms';
 import { useVisualizerStore } from '@/hooks/useVisualizer';
-import { UploadCloud, Image as ImageIcon, RotateCcw, Check } from 'lucide-react';
+import { UploadCloud, RotateCcw, Check } from 'lucide-react';
 
 export default function RoomSelector() {
   const { roomImage, isCustomRoom, dispatch } = useVisualizerStore();
