@@ -9,6 +9,7 @@ import { getProduct } from './RoomVisualizer';
 import { sampleRooms } from '@/data/rooms';
 import RoomSelector from './RoomSelector';
 import VisualizerToolbar from './VisualizerToolbar';
+import VisualizerTour from './VisualizerTour';
 import { drawPerspectiveQuad, drawQuadShadow, QuadCorners, Point2D } from '@/lib/visualization/quadWarp';
 import { getEdgeMap, getEdgeStrength, clearEdgeMapCache } from '@/lib/visualization/edgeDetection';
 import {
@@ -28,6 +29,7 @@ import {
   HelpCircle,
   X,
   Keyboard,
+  Sparkles,
 } from 'lucide-react';
 
 interface VisualizationCanvasProps {
@@ -1121,10 +1123,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       <div
         ref={containerRef}
         id="visualizer-container"
+        data-tour="canvas-stage"
         className="relative flex-1 bg-[var(--bg-tertiary)] flex items-center justify-center overflow-hidden min-h-[500px]"
       >
         {/* Floating Canvas Top Bar */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center space-x-1 bg-[var(--bg-secondary)]/90 backdrop-blur-md p-1 rounded-lg border border-[var(--border-secondary)] shadow-md text-[var(--text-primary)] text-xs">
+        <div
+          data-tour="studio-actions"
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center space-x-1 bg-[var(--bg-secondary)]/90 backdrop-blur-md p-1 rounded-lg border border-[var(--border-secondary)] shadow-md text-[var(--text-primary)] text-xs"
+        >
           <button
             type="button"
             title="Corner Perspective Tool (C)"
@@ -1285,6 +1291,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           >
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
+
+          <button
+            type="button"
+            title="Interactive Studio Guide"
+            onClick={() => window.dispatchEvent(new CustomEvent('hod:restart-tour'))}
+            className="p-2 rounded hover:bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--accent-gold)] transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         <canvas
@@ -1400,9 +1415,27 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
                   <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">Space + Drag</kbd>
                 </div>
               </div>
+
+              <div className="pt-2 border-t border-[var(--border-secondary)] flex justify-between items-center">
+                <span className="text-[11px] text-[var(--text-muted)]">Need a walkthrough?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    dispatch({ type: 'SET_SHOW_SHORTCUT_MODAL', payload: { open: false } });
+                    window.dispatchEvent(new CustomEvent('hod:restart-tour'));
+                  }}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-[var(--brand-earth)] text-[var(--bg-primary)] hover:bg-[var(--accent-gold)] hover:text-[var(--brand-earth)] text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3 text-[var(--accent-gold)]" />
+                  <span>Start Guided Tour</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
+
+        {/* First-time Onboarding Walkthrough */}
+        <VisualizerTour />
       </div>
     </div>
   );

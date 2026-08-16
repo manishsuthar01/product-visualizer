@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { products } from '@/data/products';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Sparkles } from 'lucide-react';
 
 // Dynamically import the visualization canvas only on the client
 const VisualizationCanvas = dynamic(
@@ -79,8 +79,20 @@ export default function RoomVisualizer({ searchParams }: RoomVisualizerProps) {
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
-            <span className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[11px] font-medium text-[var(--text-primary)]">
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('hod:restart-tour'));
+                }
+              }}
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] hover:border-[var(--accent-gold)] text-[11px] font-medium text-[var(--text-primary)] hover:text-[var(--accent-gold)] transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3 text-[var(--accent-gold)]" />
+              <span>Studio Guide</span>
+            </button>
+            <span className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[11px] font-medium text-[var(--text-primary)]">
               <ShieldCheck className="w-3 h-3 text-[var(--accent-gold)]" />
               <span>CAD Engine Ready</span>
             </span>
