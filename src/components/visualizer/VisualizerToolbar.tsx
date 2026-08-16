@@ -122,7 +122,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
   return (
     <div className="space-y-5 text-[var(--text-primary)]">
       {/* 2. Interactive Studio Tools Selector */}
-      <div>
+      <div data-tour="layer-tools">
         <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider block mb-2">
           2. Object & Layer Tools
         </label>
@@ -579,7 +579,7 @@ export default function VisualizerToolbar({ onExport, onClearMask, onUndo, onRed
       </div>
 
       {/* 5. Floor Lighting & Depth */}
-      <div>
+      <div data-tour="realism-controls">
         <label className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider block mb-1.5">
           5. Lighting & Shadows
         </label>

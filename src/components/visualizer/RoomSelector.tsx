@@ -60,7 +60,7 @@ export default function RoomSelector() {
   };
 
   return (
-    <div className="mb-5 space-y-4">
+    <div className="mb-5 space-y-4" data-tour="room-environment">
       {/* Upload Room Photo Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
