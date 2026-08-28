@@ -1,7 +1,7 @@
-import ProductCard from '@/components/products/ProductCard';
+import ProductCatalogFilter from '@/components/products/ProductCatalogFilter';
 import { products } from '@/data/products';
 import Link from 'next/link';
-import { Sparkles, UploadCloud, SlidersHorizontal, Eye, ArrowRight, Layers, Grid } from 'lucide-react';
+import { Sparkles, UploadCloud, SlidersHorizontal, Eye, ArrowRight, Layers, Grid, SunMedium, Columns } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -40,7 +40,7 @@ export default function Home() {
         <div className="relative mx-auto max-w-4xl text-center">
           <span className="inline-flex items-center space-x-2 rounded-full bg-[var(--bg-primary)] px-3.5 py-1 text-xs font-semibold text-[var(--accent-gold)] border border-[var(--border-secondary)] mb-6 shadow-sm">
             <Sparkles className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-            <span>3D Floor Perspective & CAD Depth Engine</span>
+            <span>3D Floor Perspective · Split Compare · CAD Depth Engine</span>
           </span>
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl text-[var(--text-primary)] leading-tight">
             Visualize Luxury Rugs <br className="hidden sm:inline" />
@@ -49,7 +49,7 @@ export default function Home() {
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base text-[var(--text-secondary)] leading-relaxed font-normal">
-            Enterprise room visualizer suite. Select high-end rug designs, upload custom interior photography, align perspective quads, and render realistic floor blend simulations.
+            Enterprise room visualizer suite. Select high-end rug designs, upload custom interior photography, align perspective quads, calibrate lighting warmth, and compare with interactive split-screen sliders.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -65,7 +65,7 @@ export default function Home() {
               className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-6 py-3 text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all"
             >
               <Grid className="w-4 h-4 text-[var(--text-secondary)]" />
-              <span>Browse Catalog ({products.length})</span>
+              <span>Explore Rug Catalog ({products.length})</span>
             </a>
           </div>
         </div>
@@ -73,14 +73,14 @@ export default function Home() {
 
       {/* Feature Highlights Grid */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-[var(--bg-secondary)] p-6 rounded-xl border border-[var(--border-secondary)] shadow-sm hover:border-[var(--border-primary)] transition-all">
             <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--accent-gold)] flex items-center justify-center mb-4">
               <UploadCloud className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-[var(--text-primary)]">Custom Room Photography</h3>
+            <h3 className="text-base font-bold text-[var(--text-primary)]">Custom Room Photos</h3>
             <p className="mt-2 text-xs text-[var(--text-secondary)] leading-relaxed">
-              Upload client living room or commercial interior photography to render high-resolution rug placement in actual rooms.
+              Upload client living room or commercial interior photography to render high-resolution rug placement in actual spaces.
             </p>
           </div>
 
@@ -90,23 +90,33 @@ export default function Home() {
             </div>
             <h3 className="text-base font-bold text-[var(--text-primary)]">CAD 4-Corner Alignment</h3>
             <p className="mt-2 text-xs text-[var(--text-secondary)] leading-relaxed">
-              Precision perspective warping, horizontal skewing, contact floor shadow controls, and auto-darken depth layer extraction.
+              Precision bilinear perspective warping, floor contact shadow controls, and 3D architectural dimension overlays.
             </p>
           </div>
 
           <div className="bg-[var(--bg-secondary)] p-6 rounded-xl border border-[var(--border-secondary)] shadow-sm hover:border-[var(--border-primary)] transition-all">
             <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--accent-gold)] flex items-center justify-center mb-4">
-              <Layers className="w-5 h-5" />
+              <Columns className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-[var(--text-primary)]">Object Layering & Export</h3>
+            <h3 className="text-base font-bold text-[var(--text-primary)]">Split-Screen Comparison</h3>
             <p className="mt-2 text-xs text-[var(--text-secondary)] leading-relaxed">
-              Extract coffee table legs or furniture above the rug using box cutouts or smart brushes, then export high-resolution PNGs.
+              Drag the golden comparison curtain to seamlessly evaluate before & after views side-by-side with live pixel clipping.
+            </p>
+          </div>
+
+          <div className="bg-[var(--bg-secondary)] p-6 rounded-xl border border-[var(--border-secondary)] shadow-sm hover:border-[var(--border-primary)] transition-all">
+            <div className="w-10 h-10 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--accent-gold)] flex items-center justify-center mb-4">
+              <SunMedium className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-[var(--text-primary)]">Lighting Color Suite</h3>
+            <p className="mt-2 text-xs text-[var(--text-secondary)] leading-relaxed">
+              Calibrate color temperature warmth, dynamic contrast, and floor texture grain to blend seamlessly with room lighting.
             </p>
           </div>
         </div>
       </section>
 
-      {/* Rug Collection Catalog */}
+      {/* Rug Collection Catalog with Interactive Filter */}
       <main id="catalog" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 pb-4 border-b border-[var(--border-secondary)]">
           <div>
@@ -114,19 +124,12 @@ export default function Home() {
               Rug Catalog & Specification
             </h2>
             <p className="mt-1 text-xs text-[var(--text-secondary)]">
-              Select any design to inspect product specifications or launch direct visualization studio mode
+              Search by style, material, or dimensions and launch instant studio simulation
             </p>
           </div>
-          <span className="mt-2 sm:mt-0 text-xs font-semibold text-[var(--accent-gold)] font-mono">
-            {products.length} Products Available
-          </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-y-8 gap-x-6 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-6">
-          {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        <ProductCatalogFilter initialProducts={products} />
       </main>
 
       {/* Footer */}

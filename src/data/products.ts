@@ -9,6 +9,9 @@ export type ProductSize = {
 export type Product = {
   id: string;
   name: string;
+  category?: 'Traditional' | 'Modern' | 'Heritage' | 'Coastal';
+  material?: string;
+  badge?: string;
   image: string | StaticImageData; // Use string for public path or StaticImageData
   price: number;
   description: string;
@@ -19,6 +22,9 @@ export const products: Product[] = [
   {
     id: "rug-001",
     name: "Ivory Heritage Rug",
+    category: "Heritage",
+    material: "100% Organic New Zealand Wool",
+    badge: "Best Seller",
     image: "/products/ivory-heritage-rug.webp",
     price: 399.99,
     description: "A classic ivory rug with intricate patterns, perfect for adding a touch of elegance to any living space.",
@@ -32,6 +38,9 @@ export const products: Product[] = [
   {
     id: "rug-002",
     name: "Sandstone Traditional Rug",
+    category: "Traditional",
+    material: "Hand-Knotted Semi-Worsted Wool",
+    badge: "Artisan Heritage",
     image: "/products/sandstone-rug.webp",
     price: 499.99,
     description: "Hand-knotted sandstone rug featuring traditional motifs, bringing warmth and character to your home.",
@@ -44,6 +53,9 @@ export const products: Product[] = [
   {
     id: "rug-003",
     name: "Modern Geometric Rug",
+    category: "Modern",
+    material: "Plush High-Density Microfiber",
+    badge: "Contemporary",
     image: "/products/modern-geometric-rug.webp",
     price: 299.99,
     description: "Contemporary rug with a bold geometric pattern, ideal for modern interiors.",
@@ -56,6 +68,9 @@ export const products: Product[] = [
   {
     id: "rug-004",
     name: "Coastal Jute Blend Rug",
+    category: "Coastal",
+    material: "Natural Raw Jute & Cotton Weft",
+    badge: "Eco Natural",
     image: "/products/coastal-jute-rug.webp",
     price: 249.99,
     description: "A natural jute blend rug with a casual coastal vibe, perfect for sunrooms or relaxed living areas.",

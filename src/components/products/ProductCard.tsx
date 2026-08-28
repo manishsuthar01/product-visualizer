@@ -21,8 +21,15 @@ export default function ProductCard({ product }: ProductCardProps) {
           className="transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
         />
+        {product.badge && (
+          <div className="absolute top-3 left-3">
+            <span className="rounded-md bg-[var(--brand-earth)]/90 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent-gold)] shadow-sm border border-[var(--accent-gold)]/30 uppercase tracking-wider">
+              {product.badge}
+            </span>
+          </div>
+        )}
         <div className="absolute top-3 right-3">
-          <span className="rounded-md bg-[var(--brand-earth)]/90 backdrop-blur-md px-2.5 py-1 text-xs font-semibold text-[var(--bg-primary)] shadow-sm border border-[var(--accent-gold)]/30">
+          <span className="rounded-md bg-[var(--bg-primary)]/90 backdrop-blur-md px-2.5 py-1 text-xs font-bold text-[var(--text-primary)] shadow-sm border border-[var(--border-secondary)]">
             ${product.price.toFixed(2)}
           </span>
         </div>
@@ -30,6 +37,14 @@ export default function ProductCard({ product }: ProductCardProps) {
 
       <div className="flex flex-1 flex-col justify-between p-4">
         <div>
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="text-[10px] font-bold text-[var(--accent-gold)] uppercase tracking-wider">
+              {product.category || 'Collection'}
+            </span>
+            <span className="text-[10px] text-[var(--text-muted)] font-mono">
+              {product.sizes.length} Sizes
+            </span>
+          </div>
           <Link href={`/products/${product.id}`}>
             <h3 className="text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--accent-gold)] transition-colors">
               {product.name}
