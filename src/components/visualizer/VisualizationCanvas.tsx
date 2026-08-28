@@ -10,7 +10,14 @@ import { sampleRooms } from '@/data/rooms';
 import RoomSelector from './RoomSelector';
 import VisualizerToolbar from './VisualizerToolbar';
 import VisualizerTour from './VisualizerTour';
-import { drawPerspectiveQuad, drawQuadShadow, QuadCorners, Point2D } from '@/lib/visualization/quadWarp';
+import {
+  drawPerspectiveQuad,
+  drawQuadShadow,
+  drawPerspectiveDimensions,
+  getCanvasFilterString,
+  QuadCorners,
+  Point2D,
+} from '@/lib/visualization/quadWarp';
 import { getEdgeMap, getEdgeStrength, clearEdgeMapCache } from '@/lib/visualization/edgeDetection';
 import {
   Move,
@@ -30,6 +37,8 @@ import {
   X,
   Keyboard,
   Sparkles,
+  Columns,
+  Ruler,
 } from 'lucide-react';
 
 interface VisualizationCanvasProps {
@@ -44,8 +53,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     roomImage,
     quadCorners,
     opacity,
+    brightness,
+    warmth,
+    contrast,
+    saturation,
     shadowOpacity,
     showOriginal,
+    comparisonMode,
+    splitPosition,
+    showDimensionsOverlay,
     activeTool,
     brushSize,
     brushHardness,
@@ -73,6 +89,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const [activeCorner, setActiveCorner] = useState<keyof QuadCorners | null>(null);
   const [hoveredCorner, setHoveredCorner] = useState<keyof QuadCorners | null>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+  const [isHoveringSplit, setIsHoveringSplit] = useState(false);
   const [mousePos, setMousePos] = useState<Point2D | null>(null);
   const [boxStart, setBoxStart] = useState<Point2D | null>(null);
   const [boxCurrent, setBoxCurrent] = useState<Point2D | null>(null);
@@ -207,6 +225,18 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           case 'x':
             dispatch({ type: 'SET_ACTIVE_TOOL', payload: { tool: 'box' } });
             break;
+          case 's':
+            if (comparisonMode === 'off') {
+              dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'split' } });
+            } else if (comparisonMode === 'split') {
+              dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'toggle' } });
+            } else {
+              dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'off' } });
+            }
+            break;
+          case 'd':
+            dispatch({ type: 'SET_SHOW_DIMENSIONS_OVERLAY', payload: { enabled: !showDimensionsOverlay } });
+            break;
           case '[':
             dispatch({ type: 'SET_BRUSH_SIZE', payload: { size: Math.max(10, brushSize - 5) } });
             break;
@@ -232,7 +262,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleUndo, handleRedo, brushSize, showShortcutModal, dispatch]);
+  }, [handleUndo, handleRedo, brushSize, showShortcutModal, comparisonMode, showDimensionsOverlay, dispatch]);
 
   // Initialize offscreen mask canvas
   useEffect(() => {
@@ -707,63 +737,96 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
     }
 
-    // LAYER 2–5: Rug composite
-    if (rugImageKonva && quadCorners && !showOriginal) {
-      // LAYER 2: Contact Floor Shadow
-      drawQuadShadow(ctx, quadCorners, shadowOpacity);
+    const isSplit = comparisonMode === 'split';
+    const isShowingRug = !showOriginal && comparisonMode !== 'toggle';
+    const splitX = canvas.width * splitPosition;
 
-      // LAYER 3: Perspective-warped Rug
-      drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 16, opacity);
+    // LAYER 2–5: Rug composite (Shadow, Perspective Rug with Lighting Filters, Floor Texture, Masks)
+    if (rugImageKonva && quadCorners && isShowingRug) {
+      // Render rug composite pass onto an offscreen canvas
+      const compCanvas = document.createElement('canvas');
+      compCanvas.width = canvas.width;
+      compCanvas.height = canvas.height;
+      const compCtx = compCanvas.getContext('2d');
 
-      // LAYER 4: Floor Texture Blend
-      if (floorTextureStrength > 0 && roomImageKonva) {
-        const rugOffscreen = document.createElement('canvas');
-        rugOffscreen.width = canvas.width;
-        rugOffscreen.height = canvas.height;
-        const rugCtx = rugOffscreen.getContext('2d');
-        if (rugCtx) {
-          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 16, 1);
+      if (compCtx) {
+        // 1. Contact Floor Shadow
+        drawQuadShadow(compCtx, quadCorners, shadowOpacity);
 
-          const blendOffscreen = document.createElement('canvas');
-          blendOffscreen.width = canvas.width;
-          blendOffscreen.height = canvas.height;
-          const blendCtx = blendOffscreen.getContext('2d');
-          if (blendCtx) {
-            blendCtx.drawImage(rugOffscreen, 0, 0);
-            blendCtx.globalCompositeOperation = 'multiply';
-            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-            blendCtx.globalCompositeOperation = 'destination-in';
-            blendCtx.drawImage(rugOffscreen, 0, 0);
+        // 2. Perspective-warped Rug with Color & Lighting Matrix
+        compCtx.save();
+        compCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+        drawPerspectiveQuad(compCtx, rugImageKonva, quadCorners, 16, opacity);
+        compCtx.restore();
 
-            ctx.save();
-            ctx.globalAlpha = floorTextureStrength;
-            ctx.drawImage(blendOffscreen, 0, 0);
-            ctx.restore();
+        // 3. Floor Texture Blend
+        if (floorTextureStrength > 0 && roomImageKonva) {
+          const rugOffscreen = document.createElement('canvas');
+          rugOffscreen.width = canvas.width;
+          rugOffscreen.height = canvas.height;
+          const rugCtx = rugOffscreen.getContext('2d');
+          if (rugCtx) {
+            rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+            drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 16, 1);
+
+            const blendOffscreen = document.createElement('canvas');
+            blendOffscreen.width = canvas.width;
+            blendOffscreen.height = canvas.height;
+            const blendCtx = blendOffscreen.getContext('2d');
+            if (blendCtx) {
+              blendCtx.drawImage(rugOffscreen, 0, 0);
+              blendCtx.globalCompositeOperation = 'multiply';
+              blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+              blendCtx.globalCompositeOperation = 'destination-in';
+              blendCtx.drawImage(rugOffscreen, 0, 0);
+
+              compCtx.save();
+              compCtx.globalAlpha = floorTextureStrength;
+              compCtx.drawImage(blendOffscreen, 0, 0);
+              compCtx.restore();
+            }
           }
         }
-      }
 
-      // LAYER 5: Foreground Mask Overlay
-      if (maskCanvasRef.current) {
-        ctx.drawImage(maskCanvasRef.current, 0, 0);
-      }
+        // 4. Foreground Mask Overlay (Furniture cutouts)
+        if (maskCanvasRef.current) {
+          compCtx.drawImage(maskCanvasRef.current, 0, 0);
+        }
 
-      // MASK PREVIEW
-      if (showMaskPreview && maskCanvasRef.current) {
-        const previewCanvas = document.createElement('canvas');
-        previewCanvas.width = canvas.width;
-        previewCanvas.height = canvas.height;
-        const previewCtx = previewCanvas.getContext('2d');
-        if (previewCtx) {
-          previewCtx.drawImage(maskCanvasRef.current, 0, 0);
-          previewCtx.globalCompositeOperation = 'source-atop';
-          previewCtx.fillStyle = 'rgba(99, 102, 241, 0.45)';
-          previewCtx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(previewCanvas, 0, 0);
+        // 5. Mask Preview Overlay
+        if (showMaskPreview && maskCanvasRef.current) {
+          const previewCanvas = document.createElement('canvas');
+          previewCanvas.width = canvas.width;
+          previewCanvas.height = canvas.height;
+          const previewCtx = previewCanvas.getContext('2d');
+          if (previewCtx) {
+            previewCtx.drawImage(maskCanvasRef.current, 0, 0);
+            previewCtx.globalCompositeOperation = 'source-atop';
+            previewCtx.fillStyle = 'rgba(99, 102, 241, 0.45)';
+            previewCtx.fillRect(0, 0, canvas.width, canvas.height);
+            compCtx.drawImage(previewCanvas, 0, 0);
+          }
+        }
+
+        // Draw composite to main canvas (with split clipping if in split mode)
+        if (isSplit) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(splitX, 0, canvas.width - splitX, canvas.height);
+          ctx.clip();
+          ctx.drawImage(compCanvas, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.drawImage(compCanvas, 0, 0);
         }
       }
 
-      // LAYER 6: UI — Quad Handles, Box Preview, Dual-Ring Cursor, Perspective Grid
+      // LAYER 6: 3D Perspective Dimension Callouts Overlay
+      if (showDimensionsOverlay && selectedSize && activeTool === 'corners' && !isSplit) {
+        drawPerspectiveDimensions(ctx, quadCorners, selectedSize);
+      }
+
+      // LAYER 7: Interactive Tool Overlays (Quad Handles, Box, Brushes)
       if (activeTool === 'corners') {
         drawPerspectiveGrid(ctx, quadCorners);
         drawQuadHandles(ctx, quadCorners, hoveredCorner, activeCorner);
@@ -786,7 +849,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         const innerRadius = (brushSize / 2) * (brushHardness / 100);
 
         ctx.save();
-        // 1. Outer Ring (Full Diameter)
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, outerRadius, 0, Math.PI * 2);
         ctx.strokeStyle = isEraserMode ? '#f43f5e' : '#6366f1';
@@ -794,7 +856,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         ctx.setLineDash([4, 4]);
         ctx.stroke();
 
-        // 2. Inner Core Ring (Hardness core boundary)
         if (brushHardness < 100 && innerRadius > 1) {
           ctx.beginPath();
           ctx.arc(mousePos.x, mousePos.y, innerRadius, 0, Math.PI * 2);
@@ -804,13 +865,11 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
           ctx.stroke();
         }
 
-        // 3. Center Dot
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, 2, 0, Math.PI * 2);
         ctx.fillStyle = isEraserMode ? '#f43f5e' : '#6366f1';
         ctx.fill();
 
-        // Subtraction indicator if Alt or Shift held
         if (isAltPressed) {
           ctx.font = 'bold 11px sans-serif';
           ctx.fillStyle = '#f43f5e';
@@ -823,7 +882,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
         ctx.restore();
       } else if (activeTool === 'wand' && mousePos) {
-        // Wand Cursor
         ctx.save();
         ctx.strokeStyle = isAltPressed ? '#f43f5e' : '#f59e0b';
         ctx.lineWidth = 1.5;
@@ -850,14 +908,94 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       }
     }
 
+    // LAYER 8: Split-Screen Comparison Curtain Divider Bar
+    if (isSplit && rugImageKonva && quadCorners) {
+      ctx.save();
+      // Divider line
+      ctx.strokeStyle = '#B89970';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, canvas.height);
+      ctx.stroke();
+
+      // Floating center circular handle
+      const handleY = canvas.height / 2;
+      ctx.fillStyle = isHoveringSplit || isDraggingSplit ? '#B89970' : '#3A312B';
+      ctx.strokeStyle = '#F5F2EC';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(splitX, handleY, 15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Grip arrows
+      ctx.fillStyle = isHoveringSplit || isDraggingSplit ? '#3A312B' : '#F5F2EC';
+      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('◀ ▶', splitX, handleY);
+
+      // Percentage indicator tag
+      const pctText = `${Math.round(splitPosition * 100)}%`;
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(43, 43, 43, 0.88)';
+      ctx.strokeStyle = '#B89970';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(splitX - 18, handleY + 22, 36, 16, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#B89970';
+      ctx.fillText(pctText, splitX, handleY + 30);
+
+      // Top Comparison Badges
+      // Left: ORIGINAL ROOM
+      const leftBadgeX = Math.max(12, splitX - 96);
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(43, 43, 43, 0.88)';
+      ctx.strokeStyle = '#8C857E';
+      ctx.beginPath();
+      ctx.roundRect(leftBadgeX, 16, 84, 22, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#DFD6C9';
+      ctx.fillText('ORIGINAL ROOM', leftBadgeX + 42, 27);
+
+      // Right: SIMULATED RUG
+      const rightBadgeX = Math.min(canvas.width - 98, splitX + 12);
+      ctx.fillStyle = 'rgba(58, 49, 43, 0.92)';
+      ctx.strokeStyle = '#B89970';
+      ctx.beginPath();
+      ctx.roundRect(rightBadgeX, 16, 86, 22, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#B89970';
+      ctx.fillText('STUDIO RUG', rightBadgeX + 43, 27);
+
+      ctx.restore();
+    }
+
     ctx.restore(); // restore zoom & pan matrix
   }, [
     roomImageKonva,
     rugImageKonva,
     quadCorners,
     opacity,
+    brightness,
+    warmth,
+    contrast,
+    saturation,
     shadowOpacity,
     showOriginal,
+    comparisonMode,
+    splitPosition,
+    showDimensionsOverlay,
+    isHoveringSplit,
+    isDraggingSplit,
+    selectedSize,
     hoveredCorner,
     activeCorner,
     activeTool,
@@ -875,8 +1013,6 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     isAltPressed,
     isShiftPressed,
   ]);
-
-
 
   const getCornerAtPos = (pos: Point2D): keyof QuadCorners | null => {
     if (!quadCorners) return null;
@@ -908,6 +1044,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     }
 
     const pos = screenToCanvas(e.clientX, e.clientY, rect, containerSize.width, containerSize.height);
+
+    // Check if dragging split comparison divider
+    if (comparisonMode === 'split') {
+      const splitX = containerSize.width * splitPosition;
+      if (Math.abs(pos.x - splitX) <= 24) {
+        setIsDraggingSplit(true);
+        return;
+      }
+    }
 
     setIsMouseDown(true);
     setMousePos(pos);
@@ -941,6 +1086,18 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
     const pos = screenToCanvas(e.clientX, e.clientY, rect, containerSize.width, containerSize.height);
 
+    // Update Split hover and drag state
+    if (comparisonMode === 'split') {
+      const splitX = containerSize.width * splitPosition;
+      setIsHoveringSplit(Math.abs(pos.x - splitX) <= 20);
+
+      if (isDraggingSplit) {
+        const newPos = Math.max(0.05, Math.min(0.95, pos.x / containerSize.width));
+        dispatch({ type: 'SET_SPLIT_POSITION', payload: { position: newPos } });
+        return;
+      }
+    }
+
     setMousePos(pos);
 
     if (isMouseDown && activeTool === 'box') {
@@ -969,6 +1126,9 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       endPan();
       return;
     }
+    if (isDraggingSplit) {
+      setIsDraggingSplit(false);
+    }
     if (isMouseDown && activeTool === 'box' && boxStart && boxCurrent) {
       applyBoxCutout(boxStart, boxCurrent);
     }
@@ -985,6 +1145,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (!rect) return;
     const touch = e.touches[0];
     const pos = screenToCanvas(touch.clientX, touch.clientY, rect, containerSize.width, containerSize.height);
+
+    if (comparisonMode === 'split') {
+      const splitX = containerSize.width * splitPosition;
+      if (Math.abs(pos.x - splitX) <= 30) {
+        setIsDraggingSplit(true);
+        return;
+      }
+    }
 
     setIsMouseDown(true);
     setMousePos(pos);
@@ -1012,6 +1180,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (!rect) return;
     const touch = e.touches[0];
     const pos = screenToCanvas(touch.clientX, touch.clientY, rect, containerSize.width, containerSize.height);
+
+    if (isDraggingSplit && comparisonMode === 'split') {
+      const newPos = Math.max(0.05, Math.min(0.95, pos.x / containerSize.width));
+      dispatch({ type: 'SET_SPLIT_POSITION', payload: { position: newPos } });
+      return;
+    }
 
     setMousePos(pos);
 
@@ -1047,9 +1221,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
     }
 
-    if (rugImageKonva && quadCorners && !showOriginal) {
+    if (rugImageKonva && quadCorners && !showOriginal && comparisonMode !== 'toggle') {
       drawQuadShadow(ctx, quadCorners, shadowOpacity);
+
+      ctx.save();
+      ctx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
       drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
+      ctx.restore();
 
       if (floorTextureStrength > 0 && roomImageKonva) {
         const rugOffscreen = document.createElement('canvas');
@@ -1057,6 +1235,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         rugOffscreen.height = canvas.height;
         const rugCtx = rugOffscreen.getContext('2d');
         if (rugCtx) {
+          rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
           drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
           const blendOffscreen = document.createElement('canvas');
           blendOffscreen.width = canvas.width;
@@ -1088,7 +1267,21 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [currentProduct.id, roomImageKonva, rugImageKonva, quadCorners, showOriginal, opacity, shadowOpacity, floorTextureStrength]);
+  }, [
+    currentProduct.id,
+    roomImageKonva,
+    rugImageKonva,
+    quadCorners,
+    showOriginal,
+    comparisonMode,
+    opacity,
+    brightness,
+    warmth,
+    contrast,
+    saturation,
+    shadowOpacity,
+    floorTextureStrength,
+  ]);
 
   if (!selectedProductId || !selectedSize) {
     return (
@@ -1263,20 +1456,48 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
           <div className="w-px h-4 bg-[var(--border-secondary)] mx-1"></div>
 
+          {/* Comparison Mode Toggle */}
           <button
             type="button"
-            title="Toggle Compare"
-            onClick={() => dispatch({ type: 'TOGGLE_BEFORE_AFTER' })}
-            className={`p-2 rounded transition-colors ${
-              showOriginal ? 'bg-[var(--accent-terracotta)]/20 text-[var(--accent-terracotta)]' : 'hover:bg-[var(--bg-primary)]'
+            title="Split Comparison Curtain (S)"
+            onClick={() => {
+              if (comparisonMode === 'off') {
+                dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'split' } });
+              } else if (comparisonMode === 'split') {
+                dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'toggle' } });
+              } else {
+                dispatch({ type: 'SET_COMPARISON_MODE', payload: { mode: 'off' } });
+              }
+            }}
+            className={`p-2 rounded flex items-center space-x-1 transition-colors ${
+              comparisonMode === 'split'
+                ? 'bg-[var(--accent-gold)] text-[var(--bg-primary)]'
+                : comparisonMode === 'toggle'
+                ? 'bg-[var(--accent-terracotta)] text-[var(--bg-primary)]'
+                : 'hover:bg-[var(--bg-primary)]'
             }`}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Columns className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline font-medium">
+              {comparisonMode === 'split' ? 'Split' : comparisonMode === 'toggle' ? 'Original' : 'Compare'}
+            </span>
+          </button>
+
+          {/* Dimension Overlay Toggle */}
+          <button
+            type="button"
+            title="Toggle Floor Dimensions (D)"
+            onClick={() => dispatch({ type: 'SET_SHOW_DIMENSIONS_OVERLAY', payload: { enabled: !showDimensionsOverlay } })}
+            className={`p-2 rounded transition-colors ${
+              showDimensionsOverlay ? 'text-[var(--accent-gold)] hover:bg-[var(--bg-primary)]' : 'opacity-40 hover:bg-[var(--bg-primary)]'
+            }`}
+          >
+            <Ruler className="w-3.5 h-3.5" />
           </button>
 
           <button
             type="button"
-            title="Export Image"
+            title="Export High-Res PNG Image"
             onClick={handleExport}
             className="p-2 rounded hover:bg-[var(--bg-primary)] transition-colors"
           >
@@ -1319,6 +1540,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
               ? isPanning
                 ? 'cursor-grabbing'
                 : 'cursor-grab'
+              : comparisonMode === 'split' && (isHoveringSplit || isDraggingSplit)
+              ? 'cursor-ew-resize'
               : activeTool === 'corners'
               ? activeCorner
                 ? 'cursor-grabbing'
@@ -1335,12 +1558,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         {quadCorners && !showOriginal && (
           <div className="absolute bottom-4 right-4 pointer-events-none flex items-center space-x-2 bg-[var(--bg-secondary)]/90 text-[var(--text-primary)] backdrop-blur-md px-3 py-1.5 rounded-md text-[11px] font-medium border border-[var(--border-secondary)] shadow-sm">
             <Info className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-            {activeTool === 'corners' && <span>Drag corner handles · Vanishing point guides enabled</span>}
-            {activeTool === 'floorTexture' && <span>Floor texture blends room lighting into rug surface</span>}
-            {activeTool === 'box' && <span>Drag box over furniture to bring it above the rug</span>}
-            {activeTool === 'brush' && <span>Paint furniture · Hold Alt to subtract · [ / ] to resize</span>}
-            {activeTool === 'wand' && <span>Click furniture to select · Hold Alt to subtract region</span>}
-            {activeTool === 'eraser' && <span>Erase painted mask areas</span>}
+            {comparisonMode === 'split' && <span>Drag the golden center slider to compare before & after</span>}
+            {comparisonMode !== 'split' && activeTool === 'corners' && <span>Drag corner handles · Vanishing point guides enabled</span>}
+            {comparisonMode !== 'split' && activeTool === 'floorTexture' && <span>Floor texture blends room lighting into rug surface</span>}
+            {comparisonMode !== 'split' && activeTool === 'box' && <span>Drag box over furniture to bring it above the rug</span>}
+            {comparisonMode !== 'split' && activeTool === 'brush' && <span>Paint furniture · Hold Alt to subtract · [ / ] to resize</span>}
+            {comparisonMode !== 'split' && activeTool === 'wand' && <span>Click furniture to select · Hold Alt to subtract region</span>}
+            {comparisonMode !== 'split' && activeTool === 'eraser' && <span>Erase painted mask areas</span>}
             {zoom > 1 && <span className="font-mono text-[var(--accent-gold)]">({Math.round(zoom * 100)}% Zoom)</span>}
           </div>
         )}
@@ -1373,6 +1597,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
                 <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
                   <span className="text-[var(--text-secondary)]">Corner Tool</span>
                   <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">C</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Split Compare</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">S</kbd>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
+                  <span className="text-[var(--text-secondary)]">Dimension Tags</span>
+                  <kbd className="px-2 py-0.5 rounded bg-[var(--bg-secondary)] border border-[var(--border-secondary)] font-mono font-bold text-[10px]">D</kbd>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-tertiary)]/60">
                   <span className="text-[var(--text-secondary)]">Paint Brush</span>

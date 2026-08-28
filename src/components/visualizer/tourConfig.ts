@@ -40,20 +40,20 @@ export const tourSteps: TourStep[] = [
   },
   {
     id: 'realism-controls',
-    title: 'Floor Texture & Lighting',
+    title: 'Lighting, Warmth & Shadows',
     description:
-      'Blend the room floor’s grain and lighting into the rug surface and calibrate contact shadows for authentic realism.',
+      'Calibrate color temperature (warm incandescent to cool daylight), contrast, and contact shadows to blend perfectly into room ambient lighting.',
     targetSelector: '[data-tour="realism-controls"]',
-    shortcut: 'Hotkey: T for Floor Texture',
+    shortcut: 'Adjust Warmth, Contrast & Shadow depth',
     placement: 'right',
   },
   {
     id: 'studio-actions',
-    title: 'Compare & Export',
+    title: 'Split Compare & Export',
     description:
-      'Toggle Before/After view to evaluate your design, then export a crisp 2× high-resolution PNG render.',
+      'Use Split Slider (Hotkey: S) to drag a before/after comparison curtain side-by-side, then export a crisp 2× high-resolution PNG render.',
     targetSelector: '[data-tour="studio-actions"]',
-    shortcut: 'Press ? anytime for keyboard shortcuts',
+    shortcut: 'Press S for Split Compare · ? for all shortcuts',
     placement: 'bottom',
   },
 ];
