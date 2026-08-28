@@ -15,8 +15,14 @@ const initialState: VisualizerState = {
   transform: { x: 0, y: 0, scale: 1, rotation: 0 },
   opacity: 1,
   brightness: 0,
+  warmth: 0,
+  contrast: 0,
+  saturation: 0,
   shadowOpacity: 0.6,
   showOriginal: false,
+  comparisonMode: 'off',
+  splitPosition: 0.5,
+  showDimensionsOverlay: true,
   activeTool: 'corners',
   brushSize: 35,
   brushHardness: 85,
@@ -83,6 +89,19 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { opacity: action.payload.opacity };
         case 'SET_BRIGHTNESS':
           return { brightness: action.payload.brightness };
+        case 'SET_WARMTH':
+          return { warmth: action.payload.warmth };
+        case 'SET_CONTRAST':
+          return { contrast: action.payload.contrast };
+        case 'SET_SATURATION':
+          return { saturation: action.payload.saturation };
+        case 'RESET_COLOR_ADJUSTMENTS':
+          return {
+            brightness: 0,
+            warmth: 0,
+            contrast: 0,
+            saturation: 0,
+          };
         case 'SET_SHADOW_OPACITY':
           return { shadowOpacity: action.payload.shadowOpacity };
         case 'SET_ACTIVE_TOOL':
@@ -111,11 +130,26 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             transform: { ...initialState.transform },
             opacity: 1,
             brightness: 0,
+            warmth: 0,
+            contrast: 0,
+            saturation: 0,
             shadowOpacity: 0.6,
             floorTextureStrength: 0.35,
           };
         case 'TOGGLE_BEFORE_AFTER':
-          return { showOriginal: !state.showOriginal };
+          return {
+            showOriginal: !state.showOriginal,
+            comparisonMode: state.comparisonMode === 'toggle' ? 'off' : 'toggle',
+          };
+        case 'SET_COMPARISON_MODE':
+          return {
+            comparisonMode: action.payload.mode,
+            showOriginal: action.payload.mode === 'toggle',
+          };
+        case 'SET_SPLIT_POSITION':
+          return { splitPosition: Math.max(0.05, Math.min(0.95, action.payload.position)) };
+        case 'SET_SHOW_DIMENSIONS_OVERLAY':
+          return { showDimensionsOverlay: action.payload.enabled };
         case 'SET_SIZE':
           return {
             selectedSize: action.payload,

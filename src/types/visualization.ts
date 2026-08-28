@@ -9,6 +9,8 @@ export type QuadCorners = {
 
 export type ActiveTool = 'corners' | 'floorTexture' | 'brush' | 'box' | 'eraser' | 'wand';
 
+export type ComparisonMode = 'off' | 'toggle' | 'split';
+
 export type VisualizerState = {
   selectedProductId: string | null;
   selectedSize: {
@@ -27,8 +29,14 @@ export type VisualizerState = {
   };
   opacity: number;
   brightness: number;
+  warmth: number;              // -50 to 50: cool daylight to golden warm glow
+  contrast: number;            // -30 to 30: soft to high dynamic contrast
+  saturation: number;          // -50 to 50: muted tone to rich vibrancy
   shadowOpacity: number;
   showOriginal: boolean;
+  comparisonMode: ComparisonMode; // 'off' (rug), 'toggle' (original), 'split' (interactive divider)
+  splitPosition: number;       // 0 to 1: position of split comparison curtain
+  showDimensionsOverlay: boolean; // projected 3D perspective dimensions on floor quad
   activeTool: ActiveTool;
   brushSize: number;
   brushHardness: number;       // 0–100: controls feathering softness (100 = hard edge)
@@ -51,9 +59,16 @@ export type VisualizerAction =
   | { type: 'UPDATE_TRANSFORM'; payload: { x?: number; y?: number; scale?: number; rotation?: number } }
   | { type: 'SET_OPACITY'; payload: { opacity: number } }
   | { type: 'SET_BRIGHTNESS'; payload: { brightness: number } }
+  | { type: 'SET_WARMTH'; payload: { warmth: number } }
+  | { type: 'SET_CONTRAST'; payload: { contrast: number } }
+  | { type: 'SET_SATURATION'; payload: { saturation: number } }
+  | { type: 'RESET_COLOR_ADJUSTMENTS' }
   | { type: 'SET_SHADOW_OPACITY'; payload: { shadowOpacity: number } }
   | { type: 'RESET_TRANSFORM' }
   | { type: 'TOGGLE_BEFORE_AFTER' }
+  | { type: 'SET_COMPARISON_MODE'; payload: { mode: ComparisonMode } }
+  | { type: 'SET_SPLIT_POSITION'; payload: { position: number } }
+  | { type: 'SET_SHOW_DIMENSIONS_OVERLAY'; payload: { enabled: boolean } }
   | { type: 'SET_SIZE'; payload: { width: number; height: number } }
   | { type: 'CLEAR_VISUALIZER' }
   | { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }

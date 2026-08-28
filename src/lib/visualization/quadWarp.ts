@@ -157,3 +157,134 @@ export function drawQuadShadow(
 
   ctx.restore();
 }
+
+/**
+ * Generate CSS canvas filter string for ambient lighting & color temperature tuning
+ */
+export function getCanvasFilterString(
+  brightness: number = 0,
+  warmth: number = 0,
+  contrast: number = 0,
+  saturation: number = 0
+): string {
+  const b = Math.max(20, Math.min(200, 100 + brightness));
+  const c = Math.max(50, Math.min(180, 100 + contrast));
+  const s = Math.max(10, Math.min(220, 100 + saturation));
+
+  let filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+
+  if (warmth > 0) {
+    // Warm incandescent tone: slight sepia blend with gentle warmth
+    const sepiaVal = Math.min(45, warmth * 0.7);
+    filter += ` sepia(${sepiaVal}%) hue-rotate(-${warmth * 0.15}deg)`;
+  } else if (warmth < 0) {
+    // Cool daylight tone: subtle hue rotate towards cyan/blue
+    filter += ` hue-rotate(${Math.abs(warmth) * 0.3}deg)`;
+  }
+
+  return filter;
+}
+
+/**
+ * Calculate the center point of the perspective quad
+ */
+export function calculateQuadCenter(corners: QuadCorners): Point2D {
+  return {
+    x: (corners.topLeft.x + corners.topRight.x + corners.bottomRight.x + corners.bottomLeft.x) / 4,
+    y: (corners.topLeft.y + corners.topRight.y + corners.bottomRight.y + corners.bottomLeft.y) / 4,
+  };
+}
+
+/**
+ * Draw perspective dimension callout badges and architectural measurement ticks on the floor quad
+ */
+export function drawPerspectiveDimensions(
+  ctx: CanvasRenderingContext2D,
+  corners: QuadCorners,
+  size: { width: number; height: number } | null
+) {
+  if (!size) return;
+  const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
+
+  ctx.save();
+
+  // Bottom edge center (front width)
+  const bottomMid = {
+    x: (bl.x + br.x) / 2,
+    y: (bl.y + br.y) / 2,
+  };
+
+  // Right edge center (depth / length)
+  const rightMid = {
+    x: (tr.x + br.x) / 2,
+    y: (tr.y + br.y) / 2,
+  };
+
+  // Center badge position
+  const center = calculateQuadCenter(corners);
+  const areaSqFt = (size.width * size.height).toFixed(0);
+
+  // 1. Draw Subtle Dimension Extension Ticks along bottom
+  ctx.strokeStyle = 'rgba(184, 153, 112, 0.6)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+
+  ctx.beginPath();
+  ctx.moveTo(bl.x, bl.y + 4);
+  ctx.lineTo(bl.x, bl.y + 14);
+  ctx.moveTo(br.x, br.y + 4);
+  ctx.lineTo(br.x, br.y + 14);
+  ctx.moveTo(bl.x, bl.y + 9);
+  ctx.lineTo(br.x, br.y + 9);
+  ctx.stroke();
+
+  // 2. Draw Floor Dimension Tag Badge at Bottom Edge
+  const badgeText = `${size.width} ft × ${size.height} ft`;
+  const subText = `${areaSqFt} sq ft`;
+
+  ctx.setLineDash([]);
+  ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
+  const textWidth = ctx.measureText(badgeText).width;
+  const badgeW = Math.max(96, textWidth + 30);
+  const badgeH = 22;
+  const badgeX = bottomMid.x - badgeW / 2;
+  const badgeY = bottomMid.y + 12;
+
+  // Background pill
+  ctx.fillStyle = 'rgba(43, 43, 43, 0.92)';
+  ctx.strokeStyle = '#B89970';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  // Text label
+  ctx.fillStyle = '#F5F2EC';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(badgeText, bottomMid.x - 12, badgeY + badgeH / 2);
+
+  // Sq ft tag
+  ctx.font = '600 8.5px system-ui, -apple-system, sans-serif';
+  ctx.fillStyle = '#B89970';
+  ctx.fillText(subText, bottomMid.x + badgeW / 2 - 18, badgeY + badgeH / 2);
+
+  // Depth callout tag at right edge
+  const depthText = `${size.height}'`;
+  ctx.font = '600 9px system-ui, -apple-system, sans-serif';
+  const depthW = 26;
+  const depthH = 16;
+  ctx.fillStyle = 'rgba(43, 43, 43, 0.85)';
+  ctx.strokeStyle = 'rgba(184, 153, 112, 0.8)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(rightMid.x + 8, rightMid.y - depthH / 2, depthW, depthH, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#F5F2EC';
+  ctx.fillText(depthText, rightMid.x + 8 + depthW / 2, rightMid.y);
+
+  ctx.restore();
+}
