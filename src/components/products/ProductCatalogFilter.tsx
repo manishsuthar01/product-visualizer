@@ -123,31 +123,59 @@ export default function ProductCatalogFilter({ initialProducts }: ProductCatalog
         </div>
 
         {/* Category & Dimension Filter Pills */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--border-secondary)]/70">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mr-1 flex items-center gap-1">
-              <Tag className="w-3 h-3 text-[var(--accent-gold)]" />
-              Style:
-            </span>
-            {categories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setSelectedCategory(category)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                  selectedCategory === category
-                    ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
-                    : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
-                }`}
-              >
-                {category}
-              </button>
-            ))}
+        <div className="space-y-2.5 pt-3 border-t border-[var(--border-secondary)]/70">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mr-1 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-[var(--accent-gold)]" />
+                Style:
+              </span>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setSelectedCategory(category)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    selectedCategory === category
+                      ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-sm'
+                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+              <span className="font-mono font-semibold text-[var(--accent-gold)]">{filteredProducts.length}</span>
+              <span>of {initialProducts.length} rugs displayed</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <span className="font-mono font-semibold text-[var(--accent-gold)]">{filteredProducts.length}</span>
-            <span>of {initialProducts.length} rugs displayed</span>
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[var(--border-secondary)]/40">
+            <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mr-1 flex items-center gap-1">
+              <SlidersHorizontal className="w-3 h-3 text-[var(--accent-gold)]" />
+              Room Size:
+            </span>
+            {[
+              { id: 'all', label: 'All Dimensions' },
+              { id: 'small', label: 'Accent / Runner (≤5 ft)' },
+              { id: 'medium', label: 'Living Area (6–8 ft)' },
+              { id: 'large', label: 'Grand Space (9+ ft)' },
+            ].map((sizeOpt) => (
+              <button
+                key={sizeOpt.id}
+                type="button"
+                onClick={() => setSelectedSizeFilter(sizeOpt.id as any)}
+                className={`px-2.5 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+                  selectedSizeFilter === sizeOpt.id
+                    ? 'bg-[var(--accent-gold)] text-[var(--bg-primary)] font-semibold shadow-xs'
+                    : 'bg-[var(--bg-tertiary)]/70 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
+                }`}
+              >
+                {sizeOpt.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>

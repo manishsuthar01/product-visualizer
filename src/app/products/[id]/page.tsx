@@ -3,6 +3,7 @@ import { products } from '@/data/products';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Eye, ShieldCheck } from 'lucide-react';
+import ProductDetailsInteractive from '@/components/products/ProductDetailsInteractive';
 
 type Params = {
   params: Promise<{
@@ -74,54 +75,8 @@ export default async function ProductPage({ params }: Params) {
             </div>
           </div>
 
-          {/* Product Info & Visualizer CTA */}
-          <div className="space-y-6">
-            <div>
-              <span className="text-xs font-semibold text-[var(--accent-gold)] uppercase tracking-widest block mb-1">
-                Rug Specifications & Dimensions
-              </span>
-              <h1 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">{product.name}</h1>
-              <p className="mt-2 text-2xl font-bold font-mono text-[var(--text-primary)]">${product.price.toFixed(2)}</p>
-            </div>
-
-            <div className="space-y-2 pt-2 border-t border-[var(--border-secondary)]">
-              <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">Description</h3>
-              <p className="text-[var(--text-secondary)] leading-relaxed text-sm">{product.description}</p>
-            </div>
-
-            <div className="space-y-3 pt-2 border-t border-[var(--border-secondary)]">
-              <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">Available Sizes</h3>
-              <div className="flex flex-wrap gap-2">
-                {product.sizes.map((size) => (
-                  <Link
-                    key={size.label}
-                    href={`/visualizer?productId=${product.id}&size=${size.width}x${size.height}`}
-                    className="group flex items-center space-x-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] px-3.5 py-2 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-all shadow-sm"
-                  >
-                    <span>{size.label}</span>
-                    <span className="text-[11px] text-[var(--text-secondary)] font-mono group-hover:text-[var(--accent-gold)]">
-                      ({size.width}&apos; &times; {size.height}&apos;)
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            {/* Launch Visualizer CTA */}
-            <div className="space-y-3 pt-4 border-t border-[var(--border-secondary)]">
-              <Link
-                href={`/visualizer?productId=${product.id}&size=${defaultSize.width}x${defaultSize.height}`}
-                className="flex w-full items-center justify-center space-x-2.5 rounded-xl bg-[var(--brand-earth)] px-6 py-3.5 text-sm font-semibold text-[var(--bg-primary)] shadow-md hover:bg-[var(--accent-gold)] hover:text-[var(--text-primary)] transition-all active:scale-95"
-              >
-                <Eye className="w-4 h-4" />
-                <span>Simulate Rug in Studio Visualizer</span>
-              </Link>
-              
-              <p className="text-center text-[11px] text-[var(--text-muted)]">
-                Upload room photo or test inside preset environment spaces
-              </p>
-            </div>
-          </div>
+          {/* Product Info & Interactive Suite */}
+          <ProductDetailsInteractive product={product} />
         </div>
       </main>
 
