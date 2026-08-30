@@ -12,6 +12,8 @@ import {
   Eraser,
   Wand2,
   RotateCcw,
+  RotateCw,
+  FlipHorizontal,
   Download,
   Sliders,
   Grid,
@@ -24,14 +26,20 @@ import {
   Undo2,
   Redo2,
   Sun,
+  Sunrise,
+  Sparkles,
   Columns,
   Bookmark,
   BookmarkPlus,
   Check,
+  CheckCheck,
+  Copy,
+  Ruler,
 } from 'lucide-react';
 
 type VisualizerToolbarProps = {
   onExport: () => void;
+  onCopySnapshot?: () => void;
   onClearMask: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -59,6 +67,7 @@ const STORAGE_KEY = 'hod_saved_scenes';
 
 export default function VisualizerToolbar({
   onExport,
+  onCopySnapshot,
   onClearMask,
   onUndo,
   onRedo,
@@ -68,6 +77,7 @@ export default function VisualizerToolbar({
   const {
     selectedProductId,
     selectedSize,
+    unitSystem,
     quadCorners,
     dispatch,
     comparisonMode,
@@ -96,6 +106,35 @@ export default function VisualizerToolbar({
   const [newSceneName, setNewSceneName] = useState('');
   const [isSavingScene, setIsSavingScene] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [justCopied, setJustCopied] = useState(false);
+
+  // Curated Atmospheric Lighting Profiles
+  const lightingPresets = [
+    {
+      id: 'daylight',
+      label: 'Daylight',
+      icon: Sun,
+      params: { warmth: 0, contrast: 6, saturation: 4, opacity: 1, shadowOpacity: 0.35, floorTextureStrength: 0.35 },
+    },
+    {
+      id: 'golden',
+      label: 'Golden Hour',
+      icon: Sunrise,
+      params: { warmth: 26, contrast: 14, saturation: 18, opacity: 0.95, shadowOpacity: 0.45, floorTextureStrength: 0.4 },
+    },
+    {
+      id: 'warm',
+      label: 'Warm Lamp',
+      icon: Sun,
+      params: { warmth: 16, contrast: 8, saturation: 6, opacity: 0.95, shadowOpacity: 0.40, floorTextureStrength: 0.35 },
+    },
+    {
+      id: 'nordic',
+      label: 'Nordic Cool',
+      icon: Sparkles,
+      params: { warmth: -18, contrast: -2, saturation: -10, opacity: 1, shadowOpacity: 0.25, floorTextureStrength: 0.3 },
+    },
+  ];
 
   // Load saved scenes on mount
   useEffect(() => {
@@ -199,6 +238,14 @@ export default function VisualizerToolbar({
 
   const handleResetQuad = () => {
     dispatch({ type: 'RESET_TRANSFORM' });
+  };
+
+  const handleCopyClick = () => {
+    if (onCopySnapshot) {
+      onCopySnapshot();
+      setJustCopied(true);
+      setTimeout(() => setJustCopied(false), 2500);
+    }
   };
 
   const handleApplyPreset = (preset: 'center' | 'wide' | 'deep' | 'runner') => {
@@ -540,7 +587,7 @@ export default function VisualizerToolbar({
                 onClick={onRedo}
                 disabled={!canRedo}
                 title="Redo (Ctrl+Shift+Z)"
-                className={`p-1.5 rounded transition-colors ${
+                className={`p-10 rounded transition-colors ${
                   canRedo
                     ? 'text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] cursor-pointer'
                     : 'text-[var(--text-muted)] cursor-not-allowed opacity-40'
@@ -613,20 +660,49 @@ export default function VisualizerToolbar({
       </div>
 
       <div>
-        <label htmlFor="rug-size" className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
-          Dimensions & Scale
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label htmlFor="rug-size" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+            Dimensions & Scale
+          </label>
+          <div className="flex items-center bg-[var(--bg-tertiary)] rounded p-0.5 border border-[var(--border-secondary)]">
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_UNIT_SYSTEM', payload: { unitSystem: 'imperial' } })}
+              className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${
+                unitSystem === 'imperial' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'text-[var(--text-muted)]'
+              }`}
+            >
+              ft
+            </button>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_UNIT_SYSTEM', payload: { unitSystem: 'metric' } })}
+              className={`px-1.5 py-0.5 text-[9px] font-semibold rounded ${
+                unitSystem === 'metric' ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)]' : 'text-[var(--text-muted)]'
+              }`}
+            >
+              m
+            </button>
+          </div>
+        </div>
         <select
           id="rug-size"
           value={selectedSize ? `${selectedSize.width}x${selectedSize.height}` : ''}
           onChange={handleSizeChange}
           className="w-full rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] shadow-sm focus:border-[var(--border-primary)] focus:outline-none"
         >
-          {currentProduct.sizes.map((size) => (
-            <option key={size.label} value={`${size.width}x${size.height}`}>
-              {size.label} ({size.width}&apos; &times; {size.height}&apos;)
-            </option>
-          ))}
+          {currentProduct.sizes.map((size) => {
+            const metricW = (size.width * 0.3048).toFixed(1);
+            const metricH = (size.height * 0.3048).toFixed(1);
+            const label = unitSystem === 'metric' 
+              ? `${size.label} (${metricW}m × ${metricH}m)` 
+              : `${size.label} (${size.width}' × ${size.height}')`;
+            return (
+              <option key={size.label} value={`${size.width}x${size.height}`}>
+                {label}
+              </option>
+            );
+          })}
         </select>
       </div>
 
@@ -641,7 +717,7 @@ export default function VisualizerToolbar({
             className="inline-flex items-center space-x-1 text-[11px] text-[var(--accent-gold)] hover:text-[var(--accent-gold-hover)] font-medium cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Reset Quad</span>
+            <span>Reset</span>
           </button>
         </div>
 
@@ -679,6 +755,26 @@ export default function VisualizerToolbar({
             <span>Hall Runner</span>
           </button>
         </div>
+        
+        {/* Orientation Transformations */}
+        <div className="grid grid-cols-2 gap-1.5 mt-2">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'ROTATE_QUAD_90' })}
+            className="flex items-center justify-center gap-1.5 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] py-1.5 text-[11px] font-medium hover:border-[var(--accent-gold)]"
+          >
+            <RotateCw className="w-3 h-3" />
+            <span>Rotate 90°</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'FLIP_QUAD_HORIZONTAL' })}
+            className="flex items-center justify-center gap-1.5 rounded-md border border-[var(--border-secondary)] bg-[var(--bg-secondary)] py-1.5 text-[11px] font-medium hover:border-[var(--accent-gold)]"
+          >
+            <FlipHorizontal className="w-3 h-3" />
+            <span>Flip Mirror</span>
+          </button>
+        </div>
       </div>
 
       {/* 5. Ambient Lighting & Color Temperature Suite */}
@@ -693,11 +789,20 @@ export default function VisualizerToolbar({
             onClick={() => dispatch({ type: 'RESET_COLOR_ADJUSTMENTS' })}
             className="text-[10px] text-[var(--accent-gold)] hover:underline cursor-pointer"
           >
-            Reset Color
+            Reset
           </button>
         </div>
 
         <div className="space-y-3 bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border-secondary)]">
+          {/* Lighting Profiles Placeholder for logic */}
+          <div className="grid grid-cols-2 gap-1.5 mb-2">
+            {lightingPresets.map((p) => (
+              <button key={p.id} onClick={() => dispatch({ type: 'APPLY_LIGHTING_PRESET', payload: p.params })} className="text-[10px] py-1 bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded flex items-center justify-center gap-1">
+                <p.icon className="w-3 h-3 text-[var(--accent-gold)]" /> {p.label}
+              </button>
+            ))}
+          </div>
+
           {/* Warmth / Color Temperature */}
           <div>
             <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
@@ -713,10 +818,6 @@ export default function VisualizerToolbar({
               onChange={(e) => dispatch({ type: 'SET_WARMTH', payload: { warmth: parseInt(e.target.value, 10) } })}
               className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
             />
-            <div className="flex justify-between text-[9px] text-[var(--text-muted)] mt-0.5">
-              <span>Cool Daylight</span>
-              <span>Warm Golden Glow</span>
-            </div>
           </div>
 
           {/* Contrast */}
@@ -880,6 +981,26 @@ export default function VisualizerToolbar({
           <Download className="w-3.5 h-3.5" />
           <span>Export 2× High-Resolution PNG</span>
         </button>
+
+        {onCopySnapshot && (
+          <button
+            onClick={handleCopyClick}
+            type="button"
+            className="flex w-full items-center justify-center space-x-2 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[var(--accent-gold)] hover:bg-[var(--bg-tertiary)] transition-colors cursor-pointer active:scale-98"
+          >
+            {justCopied ? (
+              <>
+                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-600">Copied to Clipboard!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+                <span>Copy Snapshot to Clipboard</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

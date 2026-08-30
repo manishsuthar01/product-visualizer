@@ -50,6 +50,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const {
     selectedProductId,
     selectedSize,
+    unitSystem,
     roomImage,
     quadCorners,
     opacity,
@@ -74,6 +75,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     showShortcutModal,
     dispatch,
   } = useVisualizerStore();
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  }, []);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -823,7 +833,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
       // LAYER 6: 3D Perspective Dimension Callouts Overlay
       if (showDimensionsOverlay && selectedSize && activeTool === 'corners' && !isSplit) {
-        drawPerspectiveDimensions(ctx, quadCorners, selectedSize);
+        drawPerspectiveDimensions(ctx, quadCorners, selectedSize, unitSystem);
       }
 
       // LAYER 7: Interactive Tool Overlays (Quad Handles, Box, Brushes)
@@ -1267,6 +1277,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    showToast('✨ High-Resolution PNG exported successfully!');
   }, [
     currentProduct.id,
     roomImageKonva,
@@ -1281,6 +1292,93 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     saturation,
     shadowOpacity,
     floorTextureStrength,
+    showToast,
+  ]);
+
+  const handleCopySnapshot = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width * 2;
+    exportCanvas.height = canvas.height * 2;
+    const ctx = exportCanvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.scale(2, 2);
+
+    if (roomImageKonva) {
+      ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+    }
+
+    if (rugImageKonva && quadCorners && !showOriginal && comparisonMode !== 'toggle') {
+      drawQuadShadow(ctx, quadCorners, shadowOpacity);
+
+      ctx.save();
+      ctx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+      drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
+      ctx.restore();
+
+      if (floorTextureStrength > 0 && roomImageKonva) {
+        const rugOffscreen = document.createElement('canvas');
+        rugOffscreen.width = canvas.width;
+        rugOffscreen.height = canvas.height;
+        const rugCtx = rugOffscreen.getContext('2d');
+        if (rugCtx) {
+          rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
+          const blendOffscreen = document.createElement('canvas');
+          blendOffscreen.width = canvas.width;
+          blendOffscreen.height = canvas.height;
+          const blendCtx = blendOffscreen.getContext('2d');
+          if (blendCtx) {
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+            blendCtx.globalCompositeOperation = 'multiply';
+            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+            blendCtx.globalCompositeOperation = 'destination-in';
+            blendCtx.drawImage(rugOffscreen, 0, 0);
+            ctx.save();
+            ctx.globalAlpha = floorTextureStrength;
+            ctx.drawImage(blendOffscreen, 0, 0);
+            ctx.restore();
+          }
+        }
+      }
+
+      if (maskCanvasRef.current) {
+        ctx.drawImage(maskCanvasRef.current, 0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    exportCanvas.toBlob(async (blob) => {
+      if (!blob) {
+        showToast('Snapshot generation failed');
+        return;
+      }
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        showToast('📋 High-Resolution snapshot copied to clipboard!');
+      } catch {
+        handleExport();
+      }
+    });
+  }, [
+    roomImageKonva,
+    rugImageKonva,
+    quadCorners,
+    showOriginal,
+    comparisonMode,
+    opacity,
+    brightness,
+    warmth,
+    contrast,
+    saturation,
+    shadowOpacity,
+    floorTextureStrength,
+    handleExport,
+    showToast,
   ]);
 
   if (!selectedProductId || !selectedSize) {
@@ -1304,6 +1402,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         <RoomSelector />
         <VisualizerToolbar
           onExport={handleExport}
+          onCopySnapshot={handleCopySnapshot}
           onClearMask={clearMask}
           onUndo={handleUndo}
           onRedo={handleRedo}
@@ -1572,6 +1671,14 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         {showOriginal && (
           <div className="absolute top-4 right-4 pointer-events-none bg-[var(--accent-terracotta)] text-[var(--bg-primary)] backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-bold shadow">
             BEFORE (Original Image)
+          </div>
+        )}
+
+        {/* Action Toast Notification */}
+        {toastMessage && (
+          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-30 flex items-center space-x-2 bg-[var(--bg-secondary)] text-[var(--accent-gold)] px-4 py-2 rounded-full border border-[var(--accent-gold)] shadow-xl text-xs font-semibold backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <Sparkles className="w-4 h-4 text-[var(--accent-gold)]" />
+            <span>{toastMessage}</span>
           </div>
         )}
 
