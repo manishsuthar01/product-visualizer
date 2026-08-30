@@ -8,6 +8,7 @@ type VisualizerStore = VisualizerState & {
 const initialState: VisualizerState = {
   selectedProductId: null,
   selectedSize: null,
+  unitSystem: 'imperial',
   roomImage: null,
   roomImageFile: null,
   isCustomRoom: false,
@@ -81,6 +82,43 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             },
           };
         }
+        case 'ROTATE_QUAD_90': {
+          if (!state.quadCorners) return state;
+          const { topLeft, topRight, bottomRight, bottomLeft } = state.quadCorners;
+          // Rotate texture corners clockwise:
+          return {
+            quadCorners: {
+              topLeft: bottomLeft,
+              topRight: topLeft,
+              bottomRight: topRight,
+              bottomLeft: bottomRight,
+            },
+          };
+        }
+        case 'FLIP_QUAD_HORIZONTAL': {
+          if (!state.quadCorners) return state;
+          const { topLeft, topRight, bottomRight, bottomLeft } = state.quadCorners;
+          return {
+            quadCorners: {
+              topLeft: topRight,
+              topRight: topLeft,
+              bottomRight: bottomLeft,
+              bottomLeft: bottomRight,
+            },
+          };
+        }
+        case 'FLIP_QUAD_VERTICAL': {
+          if (!state.quadCorners) return state;
+          const { topLeft, topRight, bottomRight, bottomLeft } = state.quadCorners;
+          return {
+            quadCorners: {
+              topLeft: bottomLeft,
+              topRight: bottomRight,
+              bottomRight: topRight,
+              bottomLeft: topLeft,
+            },
+          };
+        }
         case 'UPDATE_TRANSFORM':
           return {
             transform: { ...state.transform, ...action.payload },
@@ -95,6 +133,15 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { contrast: action.payload.contrast };
         case 'SET_SATURATION':
           return { saturation: action.payload.saturation };
+        case 'APPLY_LIGHTING_PRESET':
+          return {
+            warmth: action.payload.warmth,
+            contrast: action.payload.contrast,
+            saturation: action.payload.saturation,
+            ...(action.payload.opacity !== undefined ? { opacity: action.payload.opacity } : {}),
+            ...(action.payload.shadowOpacity !== undefined ? { shadowOpacity: action.payload.shadowOpacity } : {}),
+            ...(action.payload.floorTextureStrength !== undefined ? { floorTextureStrength: action.payload.floorTextureStrength } : {}),
+          };
         case 'RESET_COLOR_ADJUSTMENTS':
           return {
             brightness: 0,
@@ -150,6 +197,8 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return { splitPosition: Math.max(0.05, Math.min(0.95, action.payload.position)) };
         case 'SET_SHOW_DIMENSIONS_OVERLAY':
           return { showDimensionsOverlay: action.payload.enabled };
+        case 'SET_UNIT_SYSTEM':
+          return { unitSystem: action.payload.unitSystem };
         case 'SET_SIZE':
           return {
             selectedSize: action.payload,

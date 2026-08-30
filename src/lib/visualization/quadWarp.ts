@@ -201,7 +201,8 @@ export function calculateQuadCenter(corners: QuadCorners): Point2D {
 export function drawPerspectiveDimensions(
   ctx: CanvasRenderingContext2D,
   corners: QuadCorners,
-  size: { width: number; height: number } | null
+  size: { width: number; height: number } | null,
+  unitSystem: 'imperial' | 'metric' = 'imperial'
 ) {
   if (!size) return;
   const { topLeft: tl, topRight: tr, bottomRight: br, bottomLeft: bl } = corners;
@@ -220,9 +221,13 @@ export function drawPerspectiveDimensions(
     y: (tr.y + br.y) / 2,
   };
 
-  // Center badge position
-  const center = calculateQuadCenter(corners);
-  const areaSqFt = (size.width * size.height).toFixed(0);
+  const isMetric = unitSystem === 'metric';
+  const widthStr = isMetric ? `${(size.width * 0.3048).toFixed(1)}m` : `${size.width} ft`;
+  const heightStr = isMetric ? `${(size.height * 0.3048).toFixed(1)}m` : `${size.height} ft`;
+  const badgeText = `${widthStr} × ${heightStr}`;
+  const subText = isMetric
+    ? `${(size.width * size.height * 0.092903).toFixed(1)} m²`
+    : `${(size.width * size.height).toFixed(0)} sq ft`;
 
   // 1. Draw Subtle Dimension Extension Ticks along bottom
   ctx.strokeStyle = 'rgba(184, 153, 112, 0.6)';
@@ -239,13 +244,10 @@ export function drawPerspectiveDimensions(
   ctx.stroke();
 
   // 2. Draw Floor Dimension Tag Badge at Bottom Edge
-  const badgeText = `${size.width} ft × ${size.height} ft`;
-  const subText = `${areaSqFt} sq ft`;
-
   ctx.setLineDash([]);
   ctx.font = 'bold 10px system-ui, -apple-system, sans-serif';
   const textWidth = ctx.measureText(badgeText).width;
-  const badgeW = Math.max(96, textWidth + 30);
+  const badgeW = Math.max(104, textWidth + 36);
   const badgeH = 22;
   const badgeX = bottomMid.x - badgeW / 2;
   const badgeY = bottomMid.y + 12;
@@ -263,17 +265,17 @@ export function drawPerspectiveDimensions(
   ctx.fillStyle = '#F5F2EC';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(badgeText, bottomMid.x - 12, badgeY + badgeH / 2);
+  ctx.fillText(badgeText, bottomMid.x - 14, badgeY + badgeH / 2);
 
-  // Sq ft tag
+  // Area tag
   ctx.font = '600 8.5px system-ui, -apple-system, sans-serif';
   ctx.fillStyle = '#B89970';
-  ctx.fillText(subText, bottomMid.x + badgeW / 2 - 18, badgeY + badgeH / 2);
+  ctx.fillText(subText, bottomMid.x + badgeW / 2 - 20, badgeY + badgeH / 2);
 
   // Depth callout tag at right edge
-  const depthText = `${size.height}'`;
+  const depthText = isMetric ? `${(size.height * 0.3048).toFixed(1)}m` : `${size.height}'`;
   ctx.font = '600 9px system-ui, -apple-system, sans-serif';
-  const depthW = 26;
+  const depthW = isMetric ? 34 : 26;
   const depthH = 16;
   ctx.fillStyle = 'rgba(43, 43, 43, 0.85)';
   ctx.strokeStyle = 'rgba(184, 153, 112, 0.8)';

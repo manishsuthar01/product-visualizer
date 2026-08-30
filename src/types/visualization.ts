@@ -11,12 +11,15 @@ export type ActiveTool = 'corners' | 'floorTexture' | 'brush' | 'box' | 'eraser'
 
 export type ComparisonMode = 'off' | 'toggle' | 'split';
 
+export type UnitSystem = 'imperial' | 'metric';
+
 export type VisualizerState = {
   selectedProductId: string | null;
   selectedSize: {
     width: number;
     height: number;
   } | null;
+  unitSystem: UnitSystem;      // 'imperial' (ft) or 'metric' (m/cm)
   roomImage: string | null;
   roomImageFile: File | null;
   isCustomRoom: boolean;
@@ -56,12 +59,16 @@ export type VisualizerAction =
   | { type: 'UPLOAD_CUSTOM_ROOM'; payload: { image: string; file: File } }
   | { type: 'SET_QUAD_CORNERS'; payload: { corners: QuadCorners } }
   | { type: 'UPDATE_QUAD_CORNER'; payload: { corner: keyof QuadCorners; x: number; y: number } }
+  | { type: 'ROTATE_QUAD_90' }
+  | { type: 'FLIP_QUAD_HORIZONTAL' }
+  | { type: 'FLIP_QUAD_VERTICAL' }
   | { type: 'UPDATE_TRANSFORM'; payload: { x?: number; y?: number; scale?: number; rotation?: number } }
   | { type: 'SET_OPACITY'; payload: { opacity: number } }
   | { type: 'SET_BRIGHTNESS'; payload: { brightness: number } }
   | { type: 'SET_WARMTH'; payload: { warmth: number } }
   | { type: 'SET_CONTRAST'; payload: { contrast: number } }
   | { type: 'SET_SATURATION'; payload: { saturation: number } }
+  | { type: 'APPLY_LIGHTING_PRESET'; payload: { warmth: number; contrast: number; saturation: number; opacity?: number; shadowOpacity?: number; floorTextureStrength?: number } }
   | { type: 'RESET_COLOR_ADJUSTMENTS' }
   | { type: 'SET_SHADOW_OPACITY'; payload: { shadowOpacity: number } }
   | { type: 'RESET_TRANSFORM' }
@@ -69,6 +76,7 @@ export type VisualizerAction =
   | { type: 'SET_COMPARISON_MODE'; payload: { mode: ComparisonMode } }
   | { type: 'SET_SPLIT_POSITION'; payload: { position: number } }
   | { type: 'SET_SHOW_DIMENSIONS_OVERLAY'; payload: { enabled: boolean } }
+  | { type: 'SET_UNIT_SYSTEM'; payload: { unitSystem: UnitSystem } }
   | { type: 'SET_SIZE'; payload: { width: number; height: number } }
   | { type: 'CLEAR_VISUALIZER' }
   | { type: 'SET_ACTIVE_TOOL'; payload: { tool: ActiveTool } }
