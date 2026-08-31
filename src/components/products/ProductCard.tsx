@@ -1,7 +1,10 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
 import { Product } from '@/data/products';
-import { Eye, ArrowRight } from 'lucide-react';
+import { useFavorites } from '@/hooks/useFavorites';
+import { Eye, ArrowRight, Heart } from 'lucide-react';
 
 type ProductCardProps = {
   product: Product;
@@ -9,31 +12,53 @@ type ProductCardProps = {
 
 export default function ProductCard({ product }: ProductCardProps) {
   const defaultSize = product.sizes[0];
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorited = isFavorite(product.id);
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-secondary)] shadow-sm hover:shadow-md transition-all duration-200 hover:border-[var(--border-primary)]">
-      <Link href={`/products/${product.id}`} className="relative h-60 w-full overflow-hidden bg-[var(--bg-tertiary)] block">
-        <Image
-          src={product.image}
-          alt={product.name}
-          fill
-          style={{ objectFit: "cover" }}
-          className="transition-transform duration-500 group-hover:scale-105"
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
-        />
+      <div className="relative h-60 w-full overflow-hidden bg-[var(--bg-tertiary)] block">
+        <Link href={`/products/${product.id}`} className="absolute inset-0 block">
+          <Image
+            src={product.image}
+            alt={product.name}
+            fill
+            style={{ objectFit: "cover" }}
+            className="transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+          />
+        </Link>
+
         {product.badge && (
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-3 left-3 pointer-events-none">
             <span className="rounded-md bg-[var(--brand-earth)]/90 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent-gold)] shadow-sm border border-[var(--accent-gold)]/30 uppercase tracking-wider">
               {product.badge}
             </span>
           </div>
         )}
-        <div className="absolute top-3 right-3">
+
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleFavorite(product.id);
+            }}
+            title={favorited ? "Remove from wishlist" : "Add to wishlist"}
+            className={`p-1.5 rounded-full backdrop-blur-md transition-all shadow-sm cursor-pointer ${
+              favorited
+                ? 'bg-rose-500 text-white'
+                : 'bg-[var(--bg-primary)]/80 text-[var(--text-muted)] hover:text-rose-500 hover:bg-[var(--bg-primary)]'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${favorited ? 'fill-white' : ''}`} />
+          </button>
           <span className="rounded-md bg-[var(--bg-primary)]/90 backdrop-blur-md px-2.5 py-1 text-xs font-bold text-[var(--text-primary)] shadow-sm border border-[var(--border-secondary)]">
             ${product.price.toFixed(2)}
           </span>
         </div>
-      </Link>
+      </div>
 
       <div className="flex flex-1 flex-col justify-between p-4">
         <div>
@@ -69,6 +94,3 @@ export default function ProductCard({ product }: ProductCardProps) {
     </div>
   );
 }
-
-
-

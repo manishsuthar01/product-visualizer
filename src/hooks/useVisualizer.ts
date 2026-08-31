@@ -8,10 +8,14 @@ type VisualizerStore = VisualizerState & {
 const initialState: VisualizerState = {
   selectedProductId: null,
   selectedSize: null,
+  compareProductId: null,
+  splitType: 'original-vs-rug',
   unitSystem: 'imperial',
   roomImage: null,
   roomImageFile: null,
   isCustomRoom: false,
+  roomBrightness: 0,
+  roomWarmth: 0,
   quadCorners: null,
   transform: { x: 0, y: 0, scale: 1, rotation: 0 },
   opacity: 1,
@@ -45,6 +49,22 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
           return {
             selectedProductId: action.payload.productId,
             selectedSize: action.payload.size,
+          };
+        case 'SET_COMPARE_PRODUCT':
+          return {
+            compareProductId: action.payload.productId,
+          };
+        case 'SET_SPLIT_TYPE':
+          return {
+            splitType: action.payload.splitType,
+          };
+        case 'SET_ROOM_BRIGHTNESS':
+          return {
+            roomBrightness: action.payload.brightness,
+          };
+        case 'SET_ROOM_WARMTH':
+          return {
+            roomWarmth: action.payload.warmth,
           };
         case 'SET_ROOM_IMAGE':
           return {
@@ -182,6 +202,8 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
             saturation: 0,
             shadowOpacity: 0.6,
             floorTextureStrength: 0.35,
+            roomBrightness: 0,
+            roomWarmth: 0,
           };
         case 'TOGGLE_BEFORE_AFTER':
           return {

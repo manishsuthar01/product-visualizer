@@ -11,6 +11,8 @@ export type ActiveTool = 'corners' | 'floorTexture' | 'brush' | 'box' | 'eraser'
 
 export type ComparisonMode = 'off' | 'toggle' | 'split';
 
+export type SplitType = 'original-vs-rug' | 'rug-vs-rug';
+
 export type UnitSystem = 'imperial' | 'metric';
 
 export type VisualizerState = {
@@ -19,10 +21,14 @@ export type VisualizerState = {
     width: number;
     height: number;
   } | null;
+  compareProductId: string | null; // secondary rug for A/B split comparison
+  splitType: SplitType;           // 'original-vs-rug' or 'rug-vs-rug'
   unitSystem: UnitSystem;      // 'imperial' (ft) or 'metric' (m/cm)
   roomImage: string | null;
   roomImageFile: File | null;
   isCustomRoom: boolean;
+  roomBrightness: number;      // -30 to 30: background room exposure calibration
+  roomWarmth: number;          // -30 to 30: background room temperature calibration
   quadCorners: QuadCorners | null;
   transform: {
     x: number;
@@ -54,9 +60,13 @@ export type VisualizerState = {
 
 export type VisualizerAction =
   | { type: 'SET_PRODUCT'; payload: { productId: string; size: { width: number; height: number } } }
+  | { type: 'SET_COMPARE_PRODUCT'; payload: { productId: string | null } }
+  | { type: 'SET_SPLIT_TYPE'; payload: { splitType: SplitType } }
   | { type: 'SET_ROOM_IMAGE'; payload: { image: string; file: File | null } }
   | { type: 'SET_ROOM_SAMPLE'; payload: { image: string } }
   | { type: 'UPLOAD_CUSTOM_ROOM'; payload: { image: string; file: File } }
+  | { type: 'SET_ROOM_BRIGHTNESS'; payload: { brightness: number } }
+  | { type: 'SET_ROOM_WARMTH'; payload: { warmth: number } }
   | { type: 'SET_QUAD_CORNERS'; payload: { corners: QuadCorners } }
   | { type: 'UPDATE_QUAD_CORNER'; payload: { corner: keyof QuadCorners; x: number; y: number } }
   | { type: 'ROTATE_QUAD_90' }

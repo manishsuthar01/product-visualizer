@@ -39,7 +39,12 @@ import {
   Sparkles,
   Columns,
   Ruler,
+  Heart,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+import { products } from '@/data/products';
+import { useFavorites } from '@/hooks/useFavorites';
 
 interface VisualizationCanvasProps {
   initialProductId?: string | null;
@@ -50,8 +55,12 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const {
     selectedProductId,
     selectedSize,
+    compareProductId,
+    splitType,
     unitSystem,
     roomImage,
+    roomBrightness,
+    roomWarmth,
     quadCorners,
     opacity,
     brightness,
@@ -76,6 +85,9 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     dispatch,
   } = useVisualizerStore();
 
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [isRugDrawerOpen, setIsRugDrawerOpen] = useState(false);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -92,7 +104,11 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
   const currentProduct = getProduct(selectedProductId || undefined);
   const rugImageUrl = currentProduct.image as string;
 
+  const compareProduct = compareProductId ? products.find((p) => p.id === compareProductId) || null : null;
+  const compareRugImageUrl = compareProduct ? (compareProduct.image as string) : '';
+
   const [rugImageKonva] = useImage(rugImageUrl, 'anonymous');
+  const [compareRugImageKonva] = useImage(compareRugImageUrl, 'anonymous');
   const [roomImageKonva] = useImage(roomImage || '', 'anonymous');
 
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
@@ -742,16 +758,77 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       ctx.translate(-cx, -cy);
     }
 
-    // LAYER 1: Room Background Image
+    // LAYER 1: Room Background Image with optional Exposure/Warmth Calibration
     if (roomImageKonva) {
+      ctx.save();
+      if (roomBrightness !== 0 || roomWarmth !== 0) {
+        ctx.filter = getCanvasFilterString(roomBrightness, roomWarmth, 0, 0);
+      }
       ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
     }
 
     const isSplit = comparisonMode === 'split';
     const isShowingRug = !showOriginal && comparisonMode !== 'toggle';
     const splitX = canvas.width * splitPosition;
 
-    // LAYER 2–5: Rug composite (Shadow, Perspective Rug with Lighting Filters, Floor Texture, Masks)
+    // LAYER 1.5: In Split Mode with 'rug-vs-rug', render secondary compare rug on LEFT side
+    if (isSplit && splitType === 'rug-vs-rug' && compareRugImageKonva && quadCorners && isShowingRug) {
+      const compCanvasA = document.createElement('canvas');
+      compCanvasA.width = canvas.width;
+      compCanvasA.height = canvas.height;
+      const compCtxA = compCanvasA.getContext('2d');
+
+      if (compCtxA) {
+        drawQuadShadow(compCtxA, quadCorners, shadowOpacity);
+
+        compCtxA.save();
+        compCtxA.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+        drawPerspectiveQuad(compCtxA, compareRugImageKonva, quadCorners, 16, opacity);
+        compCtxA.restore();
+
+        if (floorTextureStrength > 0 && roomImageKonva) {
+          const rugOffA = document.createElement('canvas');
+          rugOffA.width = canvas.width;
+          rugOffA.height = canvas.height;
+          const rugCtxA = rugOffA.getContext('2d');
+          if (rugCtxA) {
+            rugCtxA.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+            drawPerspectiveQuad(rugCtxA, compareRugImageKonva, quadCorners, 16, 1);
+
+            const blendOffA = document.createElement('canvas');
+            blendOffA.width = canvas.width;
+            blendOffA.height = canvas.height;
+            const blendCtxA = blendOffA.getContext('2d');
+            if (blendCtxA) {
+              blendCtxA.drawImage(rugOffA, 0, 0);
+              blendCtxA.globalCompositeOperation = 'multiply';
+              blendCtxA.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
+              blendCtxA.globalCompositeOperation = 'destination-in';
+              blendCtxA.drawImage(rugOffA, 0, 0);
+
+              compCtxA.save();
+              compCtxA.globalAlpha = floorTextureStrength;
+              compCtxA.drawImage(blendOffA, 0, 0);
+              compCtxA.restore();
+            }
+          }
+        }
+
+        if (maskCanvasRef.current) {
+          compCtxA.drawImage(maskCanvasRef.current, 0, 0);
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, splitX, canvas.height);
+        ctx.clip();
+        ctx.drawImage(compCanvasA, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    // LAYER 2–5: Primary Rug composite (Shadow, Perspective Rug with Lighting Filters, Floor Texture, Masks)
     if (rugImageKonva && quadCorners && isShowingRug) {
       // Render rug composite pass onto an offscreen canvas
       const compCanvas = document.createElement('canvas');
@@ -861,15 +938,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         ctx.save();
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, outerRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = isEraserMode ? '#f43f5e' : '#6366f1';
+        ctx.strokeStyle = isEraserMode ? '#ef4444' : '#6366f1';
         ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
+        ctx.setLineDash([3, 3]);
         ctx.stroke();
 
         if (brushHardness < 100 && innerRadius > 1) {
           ctx.beginPath();
           ctx.arc(mousePos.x, mousePos.y, innerRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = isEraserMode ? 'rgba(244, 63, 94, 0.6)' : 'rgba(99, 102, 241, 0.6)';
+          ctx.strokeStyle = isEraserMode ? 'rgba(239, 68, 68, 0.5)' : 'rgba(99, 102, 241, 0.5)';
           ctx.lineWidth = 1;
           ctx.setLineDash([]);
           ctx.stroke();
@@ -877,19 +954,8 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
 
         ctx.beginPath();
         ctx.arc(mousePos.x, mousePos.y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = isEraserMode ? '#f43f5e' : '#6366f1';
+        ctx.fillStyle = isEraserMode ? '#ef4444' : '#6366f1';
         ctx.fill();
-
-        if (isAltPressed) {
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillStyle = '#f43f5e';
-          ctx.fillText('–', mousePos.x + outerRadius + 4, mousePos.y + 4);
-        } else if (isShiftPressed) {
-          ctx.font = 'bold 11px sans-serif';
-          ctx.fillStyle = '#6366f1';
-          ctx.fillText('+', mousePos.x + outerRadius + 4, mousePos.y + 4);
-        }
-
         ctx.restore();
       } else if (activeTool === 'wand' && mousePos) {
         ctx.save();
@@ -918,10 +984,10 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       }
     }
 
-    // LAYER 8: Split-Screen Comparison Curtain Divider Bar
-    if (isSplit && rugImageKonva && quadCorners) {
+    // LAYER 8: Split Comparison Curtain Divider & Handle
+    if (isSplit) {
       ctx.save();
-      // Divider line
+      // Divider Line
       ctx.strokeStyle = '#B89970';
       ctx.lineWidth = 2;
       ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
@@ -931,14 +997,15 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       ctx.lineTo(splitX, canvas.height);
       ctx.stroke();
 
-      // Floating center circular handle
+      // Center Handle Knob
       const handleY = canvas.height / 2;
-      ctx.fillStyle = isHoveringSplit || isDraggingSplit ? '#B89970' : '#3A312B';
-      ctx.strokeStyle = '#F5F2EC';
-      ctx.lineWidth = 2;
+      const handleRadius = isHoveringSplit || isDraggingSplit ? 18 : 16;
+      ctx.fillStyle = isHoveringSplit || isDraggingSplit ? '#D4AF37' : '#B89970';
       ctx.beginPath();
-      ctx.arc(splitX, handleY, 15, 0, Math.PI * 2);
+      ctx.arc(splitX, handleY, handleRadius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
       ctx.stroke();
 
       // Grip arrows
@@ -962,28 +1029,34 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       ctx.fillText(pctText, splitX, handleY + 30);
 
       // Top Comparison Badges
-      // Left: ORIGINAL ROOM
-      const leftBadgeX = Math.max(12, splitX - 96);
+      // Left Badge
+      const leftLabel = isSplit && splitType === 'rug-vs-rug' && compareProduct
+        ? compareProduct.name.toUpperCase()
+        : 'ORIGINAL ROOM';
+      const leftBadgeX = Math.max(12, splitX - 100);
       ctx.font = 'bold 9.5px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(43, 43, 43, 0.88)';
       ctx.strokeStyle = '#8C857E';
       ctx.beginPath();
-      ctx.roundRect(leftBadgeX, 16, 84, 22, 4);
+      ctx.roundRect(leftBadgeX, 16, 88, 22, 4);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#DFD6C9';
-      ctx.fillText('ORIGINAL ROOM', leftBadgeX + 42, 27);
+      ctx.textAlign = 'center';
+      ctx.fillText(leftLabel.length > 12 ? leftLabel.slice(0, 11) + '…' : leftLabel, leftBadgeX + 44, 27);
 
-      // Right: SIMULATED RUG
-      const rightBadgeX = Math.min(canvas.width - 98, splitX + 12);
+      // Right Badge
+      const rightLabel = currentProduct.name.toUpperCase();
+      const rightBadgeX = Math.min(canvas.width - 100, splitX + 12);
       ctx.fillStyle = 'rgba(58, 49, 43, 0.92)';
       ctx.strokeStyle = '#B89970';
       ctx.beginPath();
-      ctx.roundRect(rightBadgeX, 16, 86, 22, 4);
+      ctx.roundRect(rightBadgeX, 16, 88, 22, 4);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#B89970';
-      ctx.fillText('STUDIO RUG', rightBadgeX + 43, 27);
+      ctx.textAlign = 'center';
+      ctx.fillText(rightLabel.length > 12 ? rightLabel.slice(0, 11) + '…' : rightLabel, rightBadgeX + 44, 27);
 
       ctx.restore();
     }
@@ -1215,6 +1288,180 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     }
   };
 
+  const renderExportScene = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    if (roomImageKonva) {
+      ctx.save();
+      if (roomBrightness !== 0 || roomWarmth !== 0) {
+        ctx.filter = getCanvasFilterString(roomBrightness, roomWarmth, 0, 0);
+      }
+      ctx.drawImage(roomImageKonva, 0, 0, width, height);
+      ctx.restore();
+    }
+
+    const isSplit = comparisonMode === 'split';
+    const isShowingRug = !showOriginal && comparisonMode !== 'toggle';
+    const splitX = width * splitPosition;
+
+    // Split Left Rug (if rug-vs-rug)
+    if (isSplit && splitType === 'rug-vs-rug' && compareRugImageKonva && quadCorners && isShowingRug) {
+      const compCanvasA = document.createElement('canvas');
+      compCanvasA.width = width;
+      compCanvasA.height = height;
+      const compCtxA = compCanvasA.getContext('2d');
+      if (compCtxA) {
+        drawQuadShadow(compCtxA, quadCorners, shadowOpacity);
+        compCtxA.save();
+        compCtxA.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+        drawPerspectiveQuad(compCtxA, compareRugImageKonva, quadCorners, 24, opacity);
+        compCtxA.restore();
+
+        if (maskCanvasRef.current) {
+          compCtxA.drawImage(maskCanvasRef.current, 0, 0, width, height);
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, splitX, height);
+        ctx.clip();
+        ctx.drawImage(compCanvasA, 0, 0);
+        ctx.restore();
+      }
+    }
+
+    // Primary Rug (Right side if split, Full if normal)
+    if (rugImageKonva && quadCorners && isShowingRug) {
+      const compCanvas = document.createElement('canvas');
+      compCanvas.width = width;
+      compCanvas.height = height;
+      const compCtx = compCanvas.getContext('2d');
+      if (compCtx) {
+        drawQuadShadow(compCtx, quadCorners, shadowOpacity);
+
+        compCtx.save();
+        compCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+        drawPerspectiveQuad(compCtx, rugImageKonva, quadCorners, 24, opacity);
+        compCtx.restore();
+
+        if (floorTextureStrength > 0 && roomImageKonva) {
+          const rugOff = document.createElement('canvas');
+          rugOff.width = width;
+          rugOff.height = height;
+          const rugCtx = rugOff.getContext('2d');
+          if (rugCtx) {
+            rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
+            drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
+            const blendOff = document.createElement('canvas');
+            blendOff.width = width;
+            blendOff.height = height;
+            const blendCtx = blendOff.getContext('2d');
+            if (blendCtx) {
+              blendCtx.drawImage(rugOff, 0, 0);
+              blendCtx.globalCompositeOperation = 'multiply';
+              blendCtx.drawImage(roomImageKonva, 0, 0, width, height);
+              blendCtx.globalCompositeOperation = 'destination-in';
+              blendCtx.drawImage(rugOff, 0, 0);
+              compCtx.save();
+              compCtx.globalAlpha = floorTextureStrength;
+              compCtx.drawImage(blendOff, 0, 0);
+              compCtx.restore();
+            }
+          }
+        }
+
+        if (maskCanvasRef.current) {
+          compCtx.drawImage(maskCanvasRef.current, 0, 0, width, height);
+        }
+
+        if (isSplit) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(splitX, 0, width - splitX, height);
+          ctx.clip();
+          ctx.drawImage(compCanvas, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.drawImage(compCanvas, 0, 0);
+        }
+      }
+    }
+
+    // Split Divider & Badges on Export
+    if (isSplit) {
+      ctx.save();
+      ctx.strokeStyle = '#B89970';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, height);
+      ctx.stroke();
+
+      const handleY = height / 2;
+      ctx.fillStyle = '#B89970';
+      ctx.beginPath();
+      ctx.arc(splitX, handleY, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = '#3A312B';
+      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('◀ ▶', splitX, handleY);
+
+      // Badges
+      const leftLabel = splitType === 'rug-vs-rug' && compareProduct
+        ? compareProduct.name.toUpperCase()
+        : 'ORIGINAL ROOM';
+      const leftBadgeX = Math.max(12, splitX - 100);
+      ctx.font = 'bold 9.5px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(43, 43, 43, 0.88)';
+      ctx.strokeStyle = '#8C857E';
+      ctx.beginPath();
+      ctx.roundRect(leftBadgeX, 16, 88, 22, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#DFD6C9';
+      ctx.textAlign = 'center';
+      ctx.fillText(leftLabel.length > 12 ? leftLabel.slice(0, 11) + '…' : leftLabel, leftBadgeX + 44, 27);
+
+      const rightLabel = currentProduct.name.toUpperCase();
+      const rightBadgeX = Math.min(width - 100, splitX + 12);
+      ctx.fillStyle = 'rgba(58, 49, 43, 0.92)';
+      ctx.strokeStyle = '#B89970';
+      ctx.beginPath();
+      ctx.roundRect(rightBadgeX, 16, 88, 22, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#B89970';
+      ctx.textAlign = 'center';
+      ctx.fillText(rightLabel.length > 12 ? rightLabel.slice(0, 11) + '…' : rightLabel, rightBadgeX + 44, 27);
+
+      ctx.restore();
+    }
+  }, [
+    roomImageKonva,
+    roomBrightness,
+    roomWarmth,
+    comparisonMode,
+    showOriginal,
+    splitPosition,
+    splitType,
+    compareRugImageKonva,
+    compareProduct,
+    quadCorners,
+    shadowOpacity,
+    brightness,
+    warmth,
+    contrast,
+    saturation,
+    opacity,
+    rugImageKonva,
+    floorTextureStrength,
+    currentProduct.name,
+  ]);
+
   const handleExport = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1226,49 +1473,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (!ctx) return;
 
     ctx.scale(2, 2);
-
-    if (roomImageKonva) {
-      ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-    }
-
-    if (rugImageKonva && quadCorners && !showOriginal && comparisonMode !== 'toggle') {
-      drawQuadShadow(ctx, quadCorners, shadowOpacity);
-
-      ctx.save();
-      ctx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
-      drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
-      ctx.restore();
-
-      if (floorTextureStrength > 0 && roomImageKonva) {
-        const rugOffscreen = document.createElement('canvas');
-        rugOffscreen.width = canvas.width;
-        rugOffscreen.height = canvas.height;
-        const rugCtx = rugOffscreen.getContext('2d');
-        if (rugCtx) {
-          rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
-          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
-          const blendOffscreen = document.createElement('canvas');
-          blendOffscreen.width = canvas.width;
-          blendOffscreen.height = canvas.height;
-          const blendCtx = blendOffscreen.getContext('2d');
-          if (blendCtx) {
-            blendCtx.drawImage(rugOffscreen, 0, 0);
-            blendCtx.globalCompositeOperation = 'multiply';
-            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-            blendCtx.globalCompositeOperation = 'destination-in';
-            blendCtx.drawImage(rugOffscreen, 0, 0);
-            ctx.save();
-            ctx.globalAlpha = floorTextureStrength;
-            ctx.drawImage(blendOffscreen, 0, 0);
-            ctx.restore();
-          }
-        }
-      }
-
-      if (maskCanvasRef.current) {
-        ctx.drawImage(maskCanvasRef.current, 0, 0, canvas.width, canvas.height);
-      }
-    }
+    renderExportScene(ctx, canvas.width, canvas.height);
 
     const uri = exportCanvas.toDataURL('image/png', 1.0);
     const link = document.createElement('a');
@@ -1280,18 +1485,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     showToast('✨ High-Resolution PNG exported successfully!');
   }, [
     currentProduct.id,
-    roomImageKonva,
-    rugImageKonva,
-    quadCorners,
-    showOriginal,
-    comparisonMode,
-    opacity,
-    brightness,
-    warmth,
-    contrast,
-    saturation,
-    shadowOpacity,
-    floorTextureStrength,
+    renderExportScene,
     showToast,
   ]);
 
@@ -1306,49 +1500,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
     if (!ctx) return;
 
     ctx.scale(2, 2);
-
-    if (roomImageKonva) {
-      ctx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-    }
-
-    if (rugImageKonva && quadCorners && !showOriginal && comparisonMode !== 'toggle') {
-      drawQuadShadow(ctx, quadCorners, shadowOpacity);
-
-      ctx.save();
-      ctx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
-      drawPerspectiveQuad(ctx, rugImageKonva, quadCorners, 24, opacity);
-      ctx.restore();
-
-      if (floorTextureStrength > 0 && roomImageKonva) {
-        const rugOffscreen = document.createElement('canvas');
-        rugOffscreen.width = canvas.width;
-        rugOffscreen.height = canvas.height;
-        const rugCtx = rugOffscreen.getContext('2d');
-        if (rugCtx) {
-          rugCtx.filter = getCanvasFilterString(brightness, warmth, contrast, saturation);
-          drawPerspectiveQuad(rugCtx, rugImageKonva, quadCorners, 24, 1);
-          const blendOffscreen = document.createElement('canvas');
-          blendOffscreen.width = canvas.width;
-          blendOffscreen.height = canvas.height;
-          const blendCtx = blendOffscreen.getContext('2d');
-          if (blendCtx) {
-            blendCtx.drawImage(rugOffscreen, 0, 0);
-            blendCtx.globalCompositeOperation = 'multiply';
-            blendCtx.drawImage(roomImageKonva, 0, 0, canvas.width, canvas.height);
-            blendCtx.globalCompositeOperation = 'destination-in';
-            blendCtx.drawImage(rugOffscreen, 0, 0);
-            ctx.save();
-            ctx.globalAlpha = floorTextureStrength;
-            ctx.drawImage(blendOffscreen, 0, 0);
-            ctx.restore();
-          }
-        }
-      }
-
-      if (maskCanvasRef.current) {
-        ctx.drawImage(maskCanvasRef.current, 0, 0, canvas.width, canvas.height);
-      }
-    }
+    renderExportScene(ctx, canvas.width, canvas.height);
 
     exportCanvas.toBlob(async (blob) => {
       if (!blob) {
@@ -1365,18 +1517,7 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
       }
     });
   }, [
-    roomImageKonva,
-    rugImageKonva,
-    quadCorners,
-    showOriginal,
-    comparisonMode,
-    opacity,
-    brightness,
-    warmth,
-    contrast,
-    saturation,
-    shadowOpacity,
-    floorTextureStrength,
+    renderExportScene,
     handleExport,
     showToast,
   ]);
@@ -1657,7 +1798,13 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
         {quadCorners && !showOriginal && (
           <div className="absolute bottom-4 right-4 pointer-events-none flex items-center space-x-2 bg-[var(--bg-secondary)]/90 text-[var(--text-primary)] backdrop-blur-md px-3 py-1.5 rounded-md text-[11px] font-medium border border-[var(--border-secondary)] shadow-sm">
             <Info className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
-            {comparisonMode === 'split' && <span>Drag the golden center slider to compare before & after</span>}
+            {comparisonMode === 'split' && (
+              <span>
+                {splitType === 'rug-vs-rug'
+                  ? 'Drag golden slider to compare Rug A vs Rug B'
+                  : 'Drag golden slider to compare Before & After'}
+              </span>
+            )}
             {comparisonMode !== 'split' && activeTool === 'corners' && <span>Drag corner handles · Vanishing point guides enabled</span>}
             {comparisonMode !== 'split' && activeTool === 'floorTexture' && <span>Floor texture blends room lighting into rug surface</span>}
             {comparisonMode !== 'split' && activeTool === 'box' && <span>Drag box over furniture to bring it above the rug</span>}
@@ -1667,6 +1814,86 @@ export default function VisualizationCanvas({ initialProductId, initialSize }: V
             {zoom > 1 && <span className="font-mono text-[var(--accent-gold)]">({Math.round(zoom * 100)}% Zoom)</span>}
           </div>
         )}
+
+        {/* Studio Quick-Switch Rug Drawer & Favorites Bar */}
+        <div className="absolute bottom-4 left-4 z-20">
+          <div className="flex flex-col items-start">
+            {isRugDrawerOpen ? (
+              <div className="bg-[var(--bg-secondary)]/95 backdrop-blur-md p-3 rounded-xl border border-[var(--border-secondary)] shadow-2xl space-y-2 max-w-xs sm:max-w-md animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <div className="flex items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+                    <span className="text-xs font-bold text-[var(--text-primary)]">Quick Rug Switcher</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsRugDrawerOpen(false)}
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] cursor-pointer"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1 max-w-full no-scrollbar">
+                  {products.map((p) => {
+                    const isSelected = p.id === currentProduct.id;
+                    const isFav = isFavorite(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`relative flex-shrink-0 w-24 p-1.5 rounded-lg border text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-[var(--accent-gold)] bg-[var(--bg-tertiary)] ring-1 ring-[var(--accent-gold)]'
+                            : 'border-[var(--border-secondary)] bg-[var(--bg-primary)] hover:border-[var(--border-primary)]'
+                        }`}
+                        onClick={() => {
+                          dispatch({
+                            type: 'SET_PRODUCT',
+                            payload: { productId: p.id, size: p.sizes[0] },
+                          });
+                        }}
+                      >
+                        <div className="relative h-14 w-full rounded overflow-hidden mb-1 bg-[var(--bg-tertiary)]">
+                          <img
+                            src={p.image as string}
+                            alt={p.name}
+                            className="h-full w-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(p.id);
+                            }}
+                            className={`absolute top-0.5 right-0.5 p-1 rounded-full backdrop-blur-md transition-all cursor-pointer ${
+                              isFav ? 'bg-rose-500 text-white' : 'bg-black/40 text-white/80 hover:text-white'
+                            }`}
+                          >
+                            <Heart className={`w-2.5 h-2.5 ${isFav ? 'fill-white' : ''}`} />
+                          </button>
+                        </div>
+                        <p className="text-[10px] font-semibold text-[var(--text-primary)] truncate">{p.name}</p>
+                        <p className="text-[9px] font-mono text-[var(--accent-gold)]">${p.price.toFixed(0)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsRugDrawerOpen(true)}
+                className="flex items-center gap-2 bg-[var(--bg-secondary)]/90 backdrop-blur-md px-3 py-2 rounded-lg text-xs font-semibold text-[var(--text-primary)] border border-[var(--border-secondary)] shadow-md hover:border-[var(--accent-gold)] hover:bg-[var(--bg-secondary)] transition-all cursor-pointer"
+              >
+                <div className="h-5 w-5 rounded overflow-hidden border border-[var(--border-secondary)] flex-shrink-0">
+                  <img src={currentProduct.image as string} alt="" className="h-full w-full object-cover" />
+                </div>
+                <span className="truncate max-w-[110px] font-medium">{currentProduct.name}</span>
+                <ChevronUp className="w-3.5 h-3.5 text-[var(--accent-gold)]" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {showOriginal && (
           <div className="absolute top-4 right-4 pointer-events-none bg-[var(--accent-terracotta)] text-[var(--bg-primary)] backdrop-blur-md px-3 py-1 rounded-md text-[11px] font-bold shadow">

@@ -77,7 +77,11 @@ export default function VisualizerToolbar({
   const {
     selectedProductId,
     selectedSize,
+    compareProductId,
+    splitType,
     unitSystem,
+    roomBrightness,
+    roomWarmth,
     quadCorners,
     dispatch,
     comparisonMode,
@@ -332,25 +336,80 @@ export default function VisualizerToolbar({
           </button>
         </div>
 
-        {/* Quick Position Snaps for Split Slider */}
+        {/* Split Mode Options & A/B Rug Target */}
         {comparisonMode === 'split' && (
-          <div className="mt-2 flex items-center justify-between bg-[var(--bg-secondary)] p-2 rounded-md border border-[var(--border-secondary)]">
-            <span className="text-[11px] text-[var(--text-secondary)]">Curtain Split:</span>
-            <div className="flex gap-1">
-              {[0.25, 0.5, 0.75].map((pos) => (
+          <div className="mt-2.5 space-y-2.5 bg-[var(--bg-secondary)] p-2.5 rounded-lg border border-[var(--border-secondary)]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-[var(--text-secondary)]">Comparison:</span>
+              <div className="flex bg-[var(--bg-tertiary)] rounded p-0.5 border border-[var(--border-secondary)]">
                 <button
-                  key={pos}
                   type="button"
-                  onClick={() => dispatch({ type: 'SET_SPLIT_POSITION', payload: { position: pos } })}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors ${
-                    Math.abs(splitPosition - pos) < 0.05
-                      ? 'bg-[var(--accent-gold)] text-[var(--bg-primary)]'
-                      : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
+                  onClick={() => dispatch({ type: 'SET_SPLIT_TYPE', payload: { splitType: 'original-vs-rug' } })}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                    splitType === 'original-vs-rug'
+                      ? 'bg-[var(--brand-earth)] text-[var(--bg-primary)] shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                   }`}
                 >
-                  {pos * 100}%
+                  Room vs Rug
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    dispatch({ type: 'SET_SPLIT_TYPE', payload: { splitType: 'rug-vs-rug' } });
+                    if (!compareProductId) {
+                      const alt = products.find((p) => p.id !== currentProduct.id) || products[0];
+                      dispatch({ type: 'SET_COMPARE_PRODUCT', payload: { productId: alt.id } });
+                    }
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer ${
+                    splitType === 'rug-vs-rug'
+                      ? 'bg-[var(--accent-gold)] text-[var(--bg-primary)] font-semibold shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  Rug A vs Rug B
+                </button>
+              </div>
+            </div>
+
+            {splitType === 'rug-vs-rug' && (
+              <div>
+                <label className="text-[10px] font-semibold text-[var(--accent-gold)] uppercase tracking-wider block mb-1">
+                  Left Side: Secondary Rug (B)
+                </label>
+                <select
+                  value={compareProductId || ''}
+                  onChange={(e) => dispatch({ type: 'SET_COMPARE_PRODUCT', payload: { productId: e.target.value } })}
+                  className="w-full rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2 py-1.5 text-[11px] font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-gold)] cursor-pointer"
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id} disabled={p.id === currentProduct.id}>
+                      {p.name} {p.id === currentProduct.id ? '(Active Rug)' : `($${p.price.toFixed(2)})`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1 border-t border-[var(--border-secondary)]">
+              <span className="text-[10px] text-[var(--text-muted)]">Curtain Split:</span>
+              <div className="flex gap-1">
+                {[0.25, 0.5, 0.75].map((pos) => (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => dispatch({ type: 'SET_SPLIT_POSITION', payload: { position: pos } })}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-colors cursor-pointer ${
+                      Math.abs(splitPosition - pos) < 0.05
+                        ? 'bg-[var(--accent-gold)] text-[var(--bg-primary)]'
+                        : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
+                    }`}
+                  >
+                    {pos * 100}%
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -887,6 +946,43 @@ export default function VisualizerToolbar({
                 onChange={(e) =>
                   dispatch({ type: 'SET_SHADOW_OPACITY', payload: { shadowOpacity: parseFloat(e.target.value) } })
                 }
+                className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
+              />
+            </div>
+          </div>
+
+          {/* Background Room Lighting Calibration */}
+          <div className="pt-2 border-t border-[var(--border-secondary)] space-y-2">
+            <span className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">
+              Room Environment Light
+            </span>
+            <div>
+              <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
+                <span>Room Exposure</span>
+                <span className="font-mono">{roomBrightness > 0 ? `+${roomBrightness}` : roomBrightness}</span>
+              </div>
+              <input
+                type="range"
+                min="-25"
+                max="25"
+                step="1"
+                value={roomBrightness}
+                onChange={(e) => dispatch({ type: 'SET_ROOM_BRIGHTNESS', payload: { brightness: parseInt(e.target.value, 10) } })}
+                className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
+              />
+            </div>
+            <div>
+              <div className="flex justify-between text-[11px] text-[var(--text-secondary)] mb-1 font-medium">
+                <span>Room Color Tone</span>
+                <span className="font-mono">{roomWarmth > 0 ? `+${roomWarmth}` : roomWarmth}</span>
+              </div>
+              <input
+                type="range"
+                min="-25"
+                max="25"
+                step="1"
+                value={roomWarmth}
+                onChange={(e) => dispatch({ type: 'SET_ROOM_WARMTH', payload: { warmth: parseInt(e.target.value, 10) } })}
                 className="w-full accent-[var(--accent-gold)] cursor-pointer h-1.5 bg-[var(--bg-tertiary)] rounded-lg appearance-none"
               />
             </div>

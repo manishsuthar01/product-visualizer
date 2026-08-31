@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Product } from '@/data/products';
-import { Eye, Check, Copy, Share2, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useFavorites } from '@/hooks/useFavorites';
+import { Eye, Check, Copy, Share2, Sparkles, CheckCircle2, Heart } from 'lucide-react';
 
 interface ProductDetailsInteractiveProps {
   product: Product;
@@ -14,6 +15,9 @@ export default function ProductDetailsInteractive({ product }: ProductDetailsInt
   const [selectedSizeIndex, setSelectedSizeIndex] = useState(0);
   const [copiedSpec, setCopiedSpec] = useState(false);
   const [sharedLink, setSharedLink] = useState(false);
+
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorited = isFavorite(product.id);
 
   const currentSize = product.sizes[selectedSizeIndex] || product.sizes[0];
 
@@ -64,6 +68,19 @@ House of Décor — Floor Visualizer Studio`;
             {product.category || 'Luxury Collection'} · Artisan Specification
           </span>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => toggleFavorite(product.id)}
+              title={favorited ? "Remove from wishlist" : "Add to wishlist"}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors cursor-pointer ${
+                favorited
+                  ? 'bg-rose-50 border-rose-200 text-rose-600'
+                  : 'bg-[var(--bg-secondary)] border-[var(--border-secondary)] hover:border-rose-400 text-[var(--text-secondary)] hover:text-rose-500'
+              }`}
+            >
+              <Heart className={`w-3 h-3 ${favorited ? 'fill-rose-600' : ''}`} />
+              <span>{favorited ? 'Saved' : 'Wishlist'}</span>
+            </button>
             <button
               type="button"
               onClick={handleCopySpecs}
