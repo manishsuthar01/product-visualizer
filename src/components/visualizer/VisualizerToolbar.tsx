@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useVisualizerStore } from '@/hooks/useVisualizer';
 import { products } from '@/data/products';
+import { QuadCorners } from '@/types/visualization';
 import { getProduct } from './RoomVisualizer';
 import {
   Move,
@@ -53,7 +54,7 @@ interface SavedScene {
   date: string;
   productId: string;
   size: { width: number; height: number };
-  quadCorners: any;
+  quadCorners: QuadCorners | null;
   opacity: number;
   brightness: number;
   warmth: number;
@@ -1014,6 +1015,12 @@ export default function VisualizerToolbar({
               placeholder="e.g., Living Room Layout"
               value={newSceneName}
               onChange={(e) => setNewSceneName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSaveCurrentScene();
+                }
+              }}
               className="w-full rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-gold)]"
             />
             <button
