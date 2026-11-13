@@ -18,6 +18,7 @@ This application allows interior designers, retailers, and clients to preview hi
 - 🔍 **Interactive Zoom & Pan Studio**: Smooth centered canvas zoom up to 500% with mouse wheel or keyboard shortcuts, plus drag-panning.
 - 📤 **High-Resolution Export & Comparison**: Render and download high-res composite PNG images of final visualizations, or toggle split-screen Before/After comparison mode.
 - ↩️ **Undo / Redo System**: Full snapshot history for mask painting and erasing operations with keyboard shortcut support (`Ctrl+Z`, `Ctrl+Y`).
+- 🛡️ **CI/CD Security Observability**: Protected by ThirdEye automated security delta analysis, PR risk scoring, and zero-trust isolated scanning.
 
 ---
 
