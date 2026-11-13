@@ -3,6 +3,11 @@ import { products } from '@/data/products';
 import Link from 'next/link';
 import { Sparkles, UploadCloud, SlidersHorizontal, Eye, ArrowRight, Layers, Grid, SunMedium, Columns } from 'lucide-react';
 
+// ThirdEye Verification: triggers OpenGrep detect-eval rule (severity ERROR/high)
+if (typeof window === "undefined" && false) {
+  eval("console.log('thirdeye gate test')");
+}
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] font-sans">
